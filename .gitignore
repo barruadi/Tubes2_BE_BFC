@@ -9,7 +9,7 @@
 !.yarn/plugins
 !.yarn/releases
 !.yarn/versions
-
+data
 # testing
 /coverage
 
@@ -19,7 +19,9 @@
 
 # production
 /build
-
+src/cmd/dfs.go
+src/cmd/dfs2.go
+src/cmd/olddfs.go
 # misc
 .DS_Store
 *.pem
