@@ -1,31 +1,34 @@
-package main
+package main  // NTAR GANTI KE PACKAGE SCRAPPER klo mau integrate , func mainny jg apus
+// package scrapper
 
 import (
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"os"
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/PuerkitoBio/goquery"
 )
 
-// ElementInfo adalah struktur data untuk menyimpan tier dan resep elemen
+// ElementInfo adalah struktur untuk menyimpan informasi tentang elemen
 type ElementInfo struct {
 	Tier    int        `json:"tier"`
 	Recipes [][]string `json:"recipes"`
 }
 
-// cleanText menghilangkan whitespace berlebih
-func cleanText(text string) string {
+// CleanText menghilangkan whitespace berlebih dari string
+func CleanText(text string) string {
 	re := regexp.MustCompile(`\s+`)
 	return strings.TrimSpace(re.ReplaceAllString(text, " "))
 }
 
-// extractTierNumber mengekstrak nomor tier dari string id
-func extractTierNumber(id string) (int, error) {
+// ExtractTier mengekstrak nomor tier dari id heading
+func ExtractTier(id string) (int, error) {
 	re := regexp.MustCompile(`Tier_(\d+)`)
 	matches := re.FindStringSubmatch(id)
 	if len(matches) < 2 {
@@ -34,21 +37,21 @@ func extractTierNumber(id string) (int, error) {
 	return strconv.Atoi(matches[1])
 }
 
-// parseRecipes mengekstrak resep dari sel <td>
-func parseRecipes(recipeCell *goquery.Selection) [][]string {
+// ParseRecipes mengekstrak resep dari elemen <td>
+func ParseRecipes(recipeCell *goquery.Selection) [][]string {
 	var recipes [][]string
 	
 	recipeCell.Find("li").Each(func(i int, li *goquery.Selection) {
 		var ingredients []string
 		
 		li.Find("a").Each(func(j int, a *goquery.Selection) {
-			ingredient := strings.ToLower(cleanText(a.Text()))
+			ingredient := strings.ToLower(CleanText(a.Text()))
 			if ingredient != "" {
 				ingredients = append(ingredients, ingredient)
 			}
 		})
 		
-		// Recipe harus berisi 2 ingredients
+		// Resep harus berisi 2 bahan
 		if len(ingredients) == 2 {
 			recipes = append(recipes, ingredients)
 		}
@@ -57,39 +60,39 @@ func parseRecipes(recipeCell *goquery.Selection) [][]string {
 	return recipes
 }
 
-func main() {
-	url := "https://little-alchemy.fandom.com/wiki/Elements_(Little_Alchemy_2)"
+// ScrapeAlchemyElements melakukan scraping pada wiki Little Alchemy 2
+func ScrapeAlchemyElements() (map[string]ElementInfo, error) {
+	startTime := time.Now()
 	
-	// Buat HTTP request dengan User-Agent yang lebih mirip browser
+	// Siapkan HTTP client dengan User-Agent untuk menghindari pemblokiran
 	client := &http.Client{}
-	req, err := http.NewRequest("GET", url, nil)
+	req, err := http.NewRequest("GET", 
+		"https://little-alchemy.fandom.com/wiki/Elements_(Little_Alchemy_2)", nil)
 	if err != nil {
-		fmt.Println("Error creating request:", err)
-		return
+		return nil, fmt.Errorf("error creating request: %w", err)
 	}
 	
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
+	req.Header.Set("User-Agent", 
+		"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
 	
+	// Kirim request
 	resp, err := client.Do(req)
 	if err != nil {
-		fmt.Println("Error fetching URL:", err)
-		return
+		return nil, fmt.Errorf("error fetching URL: %w", err)
 	}
 	defer resp.Body.Close()
 	
 	if resp.StatusCode != 200 {
-		fmt.Printf("Status code error: %d %s\n", resp.StatusCode, resp.Status)
-		return
+		return nil, fmt.Errorf("status code error: %d %s", resp.StatusCode, resp.Status)
 	}
 	
-	// Parse HTML menggunakan goquery
+	// Parse HTML
 	doc, err := goquery.NewDocumentFromReader(resp.Body)
 	if err != nil {
-		fmt.Println("Error parsing HTML:", err)
-		return
+		return nil, fmt.Errorf("error parsing HTML: %w", err)
 	}
 	
-	// Inisialisasi map untuk menyimpan informasi elemen
+	// Inisialisasi map untuk menyimpan data elemen
 	elements := make(map[string]ElementInfo)
 	
 	// Tambahkan elemen dasar secara manual
@@ -101,7 +104,7 @@ func main() {
 		}
 	}
 	
-	// Cari semua heading tier (h2 dan h3)
+	// Cari semua heading tier
 	doc.Find("h2, h3").Each(func(i int, s *goquery.Selection) {
 		headlineSpan := s.Find("span.mw-headline")
 		if headlineSpan.Length() == 0 {
@@ -114,7 +117,7 @@ func main() {
 		}
 		
 		// Ekstrak nomor tier
-		tier, err := extractTierNumber(id)
+		tier, err := ExtractTier(id)
 		if err != nil {
 			fmt.Printf("Warning: %v\n", err)
 			return
@@ -125,16 +128,15 @@ func main() {
 		// Cari tabel yang mengikuti heading ini
 		var table *goquery.Selection
 		
-		// Cari tabel setelah heading
 		next := s.NextAll()
 		next.EachWithBreak(func(i int, el *goquery.Selection) bool {
 			if el.Is("table") {
 				table = el
 				return false // break loop
 			} else if el.Is("h2, h3") {
-				return false // break if we hit another heading first
+				return false // break jika bertemu heading lain
 			}
-			return true // continue loop
+			return true // lanjutkan loop
 		})
 		
 		if table == nil {
@@ -142,7 +144,7 @@ func main() {
 			return
 		}
 		
-		// Process each row in the table (skip header row)
+		// Proses setiap baris dalam tabel (skip header)
 		table.Find("tr").Each(func(j int, row *goquery.Selection) {
 			if j == 0 {
 				return // Skip header row
@@ -150,27 +152,27 @@ func main() {
 			
 			cells := row.Find("td")
 			if cells.Length() < 2 {
-				return // Skip if not enough cells
+				return // Skip jika tidak cukup sel
 			}
 			
-			// Get element name from first cell
+			// Ambil nama elemen dari sel pertama
 			elementCell := cells.Eq(0)
 			elementLink := elementCell.Find("a")
 			elementName := ""
 			
 			if elementLink.Length() > 0 {
-				elementName = strings.ToLower(cleanText(elementLink.Text()))
+				elementName = strings.ToLower(CleanText(elementLink.Text()))
 			} else {
-				elementName = strings.ToLower(cleanText(elementCell.Text()))
+				elementName = strings.ToLower(CleanText(elementCell.Text()))
 			}
 			
 			if elementName == "" {
-				return // Skip if no element name found
+				return // Skip jika tidak ada nama elemen
 			}
 			
-			// Get recipes from second cell
+			// Ambil resep dari sel kedua
 			recipeCell := cells.Eq(1)
-			recipes := parseRecipes(recipeCell)
+			recipes := ParseRecipes(recipeCell)
 			
 			if len(recipes) > 0 {
 				elements[elementName] = ElementInfo{
@@ -181,27 +183,117 @@ func main() {
 		})
 	})
 	
-	// Convert to JSON
+	// Tambahkan debug info
+	elapsedTime := time.Since(startTime)
+	fmt.Printf("Scraping completed in %s\n", elapsedTime)
+	fmt.Printf("Found %d elements (including %d base elements)\n", 
+		len(elements), len(baseElements))
+	
+	return elements, nil
+}
+
+// SaveElementsToJSON menyimpan data elemen ke file JSON
+func SaveElementsToJSON(elements map[string]ElementInfo, filepath string) error {
+	// Buat JSON
 	jsonData, err := json.MarshalIndent(elements, "", "  ")
 	if err != nil {
-		fmt.Println("Error creating JSON:", err)
-		return
+		return fmt.Errorf("error creating JSON: %w", err)
 	}
 	
-	// Create output directory if it doesn't exist
+	// Buat direktori jika belum ada
+	dir := strings.TrimSuffix(filepath, "/"+filepath)
+	if dir != "" && dir != filepath {
+		err = os.MkdirAll(dir, 0755)
+		if err != nil {
+			return fmt.Errorf("error creating directory: %w", err)
+		}
+	}
+	
+	// Tulis ke file
+	err = ioutil.WriteFile(filepath, jsonData, 0644)
+	if err != nil {
+		return fmt.Errorf("error writing JSON file: %w", err)
+	}
+	
+	fmt.Printf("Successfully saved data to %s\n", filepath)
+	return nil
+}
+
+// LoadElementsFromJSON membaca data elemen dari file JSON
+func LoadElementsFromJSON(filepath string) (map[string]ElementInfo, error) {
+	// Baca file
+	data, err := ioutil.ReadFile(filepath)
+	if err != nil {
+		return nil, fmt.Errorf("error reading JSON file: %w", err)
+	}
+	
+	// Parse JSON
+	var elements map[string]ElementInfo
+	err = json.Unmarshal(data, &elements)
+	if err != nil {
+		return nil, fmt.Errorf("error parsing JSON: %w", err)
+	}
+	
+	return elements, nil
+}
+
+// Contoh Fungsi main untuk testing
+func main() {
+	// Test scraping
+	fmt.Println("Starting Little Alchemy 2 scraper...")
+	
+	// Scrape elemen dari wiki
+	elements, err := ScrapeAlchemyElements()
+	if err != nil {
+		fmt.Printf("Error scraping elements: %v\n", err)
+		os.Exit(1)
+	}
+	
+	// Buat direktori untuk output jika belum ada
 	err = os.MkdirAll("src/data", 0755)
 	if err != nil {
-		fmt.Println("Error creating directory:", err)
-		return
+		fmt.Printf("Error creating directory: %v\n", err)
+		os.Exit(1)
 	}
 	
-	// Write to file
-	err = os.WriteFile("src/data/alchemy_recipes.json", jsonData, 0644)
+	// Simpan ke file JSON
+	outputPath := "src/data/alchemy_recipes.json"
+	err = SaveElementsToJSON(elements, outputPath)
 	if err != nil {
-		fmt.Println("Error writing JSON file:", err)
-		return
+		fmt.Printf("Error saving JSON: %v\n", err)
+		os.Exit(1)
 	}
 	
-	fmt.Printf("Successfully processed and saved %d elements (including %d basic elements) to src/data/alchemy_recipes.json\n", 
-		len(elements), len(baseElements))
+	// Tes membaca dari file JSON
+	fmt.Println("\nTesting JSON loading...")
+	loadedElements, err := LoadElementsFromJSON(outputPath)
+	if err != nil {
+		fmt.Printf("Error loading JSON: %v\n", err)
+		os.Exit(1)
+	}
+	
+	// Verifikasi data
+	fmt.Printf("Successfully loaded %d elements from JSON\n", len(loadedElements))
+	
+	// Tampilkan beberapa elemen
+	fmt.Println("\nSample elements:")
+	sampleElements := []string{"brick", "volcano", "human", "time"}
+	for _, name := range sampleElements {
+		if info, exists := loadedElements[name]; exists {
+			fmt.Printf("- %s (Tier %d) has %d recipe(s)\n", 
+				name, info.Tier, len(info.Recipes))
+			for i, recipe := range info.Recipes {
+				if i < 3 { // Tunjukkan max 3 resep
+					fmt.Printf("  * %s + %s\n", recipe[0], recipe[1])
+				}
+			}
+			if len(info.Recipes) > 3 {
+				fmt.Printf("  * (and %d more recipes)\n", len(info.Recipes)-3)
+			}
+		} else {
+			fmt.Printf("- %s: Not found\n", name)
+		}
+	}
+	
+	fmt.Println("\nScraper test completed successfully!")
 }
