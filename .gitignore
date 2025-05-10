@@ -19,9 +19,12 @@ data
 
 # production
 /build
-src/cmd/dfs.go
-src/cmd/dfs2.go
-src/cmd/olddfs.go
+
+# development
+src/cmd/dfsdev.go
+output.json
+
+output
 # misc
 .DS_Store
 *.pem
