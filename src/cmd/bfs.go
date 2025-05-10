@@ -1,22 +1,11 @@
-package main
+package cmd
 
 import (
-	"bufio"
-	"encoding/json"
 	"fmt"
-	"os"
-	"strconv"
-	"strings"
+	"time"
 )
 
 // ---------------- Data Structures ----------------
-
-type ElementNode struct {
-	Result   	string        `json:"result"`
-	Children 	[]ElementNode `json:"children,omitempty"`
-}
-
-type RecipeMap  map[string][][]string
 
 type bfsNode struct {
 	Current 	string
@@ -24,7 +13,7 @@ type bfsNode struct {
 	Visited 	map[string]bool
 }
 
-var baseElements = map[string]bool{
+var abaseElements = map[string]bool{
 	"water"    : true,
 	"fire"     : true,
 	"earth"    : true,
@@ -32,7 +21,7 @@ var baseElements = map[string]bool{
 }
 
 func isBase(e string) bool {
-	return baseElements[e]
+	return abaseElements[e]
 }
 
 func copyMap(original map[string]bool) map[string]bool {
@@ -41,19 +30,6 @@ func copyMap(original map[string]bool) map[string]bool {
 		newMap[k] = v
 	}
 	return newMap
-}
-
-func writeAndPrint(data interface{}, filename string) {
-	jsonBytes, err := json.MarshalIndent(data, "", "  ")
-	if err != nil {
-		fmt.Println("Error encoding result:", err)
-		return
-	}
-	fmt.Println("\nResult:")
-	fmt.Println(string(jsonBytes))
-	if err := os.WriteFile(filename, jsonBytes, 0644); err != nil {
-		fmt.Println("Error writing file:", err)
-	}
 }
 
 // ---------------- Helper ----------------
@@ -154,7 +130,7 @@ func bfsShortestPath(recipes RecipeMap, target string) *ElementNode {
 
 // ---------------- N Recipes ----------------
 
-func findNPathsBFS(recipes RecipeMap, target string, maxPaths int) []ElementNode {
+func FindNPathsBFS(recipes RecipeMap, target string, maxPaths int) BfsResult {
 	type state struct {
 		current string
 		visited map[string]bool
@@ -211,63 +187,18 @@ func findNPathsBFS(recipes RecipeMap, target string, maxPaths int) []ElementNode
 		}
 	}
 
-	return results
+	var finalResult = BfsResult{target, results, 10, 0}
+
+	return finalResult
 }
 
 // ---------------- Main ----------------
 
-func main() {
-	data, err := os.ReadFile("./data/alchemy_recipes.json")
-	if err != nil {
-		fmt.Println("Error reading recipes.json:", err)
-		return
-	}
+func MainBfs(recipes RecipeMap, target string, maxPaths int) BfsResult {
+	startTime := time.Now()
+	var bfsResult BfsResult = FindNPathsBFS(recipes, target, maxPaths)
+	searchTime := time.Since(startTime).Milliseconds()
+	bfsResult.SearchTime = float64(searchTime)
 
-	var recipes RecipeMap
-	if err := json.Unmarshal(data, &recipes); err != nil {
-		fmt.Println("Invalid JSON:", err)
-		return
-	}
-
-	reader := bufio.NewReader(os.Stdin)
-
-	fmt.Print("Enter target element: ")
-	target, _ := reader.ReadString('\n')
-	target = strings.TrimSpace(target)
-
-	fmt.Print("Choose mode ('1. shortest', '2. multiple-recipe'): ")
-	mode, _ := reader.ReadString('\n')
-	mode = strings.TrimSpace(mode)
-
-	switch mode {
-	case "1":
-		result := resolveToBase(recipes, target)
-		if result == nil {
-			fmt.Println("Not Found.")
-			return
-		}
-		writeAndPrint(result, "result_tree.json")
-
-	case "2":
-		fmt.Print("Berapa: ")
-		nStr, _ := reader.ReadString('\n')
-		nStr = strings.TrimSpace(nStr)
-		n, err := strconv.Atoi(nStr)
-		if err != nil || n <= 0 {
-			fmt.Println("Invalid number.")
-			return
-		}
-
-		var results []ElementNode
-		results = findNPathsBFS(recipes, target, n)
-
-		if len(results) == 0 {
-			fmt.Println("Not Found")
-			return
-		}
-		writeAndPrint(results, "result_tree.json")
-
-	default:
-		fmt.Println("Invalid")
-	}
+	return  bfsResult
 }

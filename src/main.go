@@ -5,29 +5,15 @@ import (
     "net/http"
     "src/cmd"
     "os"
+    "fmt"
 )
 
 type RequestData struct {
-    ElementTarget   string
-    AlgorithmType   string
-    Multiple        bool
-    MaxRecipe       int
+    ElementTarget string `json:"ElementTarget"`
+    AlgorithmType string `json:"AlgorithmType"`
+    Multiple      bool   `json:"Multiple"`
+    MaxRecipe     int    `json:"MaxRecipe"`
 }
-
-type Node struct {
-    Name            string
-    Children        []*Node
-}
-
-type ResponseData struct {
-    TargetElement   string
-    RecipeTree      *Node
-    VisitedNodes    int
-	SearchTime      float64
-	Found           bool
-	Steps           int 
-}
-
 
 func handleData(w http.ResponseWriter, r *http.Request) {
     w.Header().Set("Content-Type", "application/json")
@@ -44,9 +30,15 @@ func handleData(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    // SCRAP DATA
-    scrapData, err := os.ReadFile("../data/alchemy_recipes.json")
+    // SCRAP DATA ----- ganti jadi utils.scrapper --------
+    scrapData, err := os.ReadFile("./data/alchemy_recipes.json")
     if err != nil {
+		return
+	}
+
+    var recipes cmd.RecipeMap
+	if err := json.Unmarshal(scrapData, &recipes); err != nil {
+		fmt.Println("Invalid JSON:", err)
 		return
 	}
 
@@ -58,21 +50,21 @@ func handleData(w http.ResponseWriter, r *http.Request) {
             return
         }
 
-        var response ResponseData
-
+        // var response ResponseData
+        var results cmd.BfsResult
         if data.AlgorithmType == "bfs" {
             // BFS
             
         } else if data.AlgorithmType == "dfs" {
             // DFS
-            // cmd.DFS()
+            results = cmd.FindNPathsBFS(recipes, data.ElementTarget, data.MaxRecipe)
         } else if data.AlgorithmType == "bidirectional" {
             // BIDIRECTIONAL
 
         }
 
         w.WriteHeader(http.StatusOK)
-        json.NewEncoder(w).Encode(response)
+        json.NewEncoder(w).Encode(results)
 
     } else {
         http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
