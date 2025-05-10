@@ -8,20 +8,22 @@ import (
 // ---------------- Data Structures ----------------
 
 type bfsNode struct {
-	Current 	string
-	Tree    	ElementNode
-	Visited 	map[string]bool
+	Current string
+	Tree    ElementNode
+	Visited map[string]bool
 }
 
-var abaseElements = map[string]bool{
-	"water"    : true,
-	"fire"     : true,
-	"earth"    : true,
-	"air"      : true,
+// ---------------- Base Elements ----------------
+
+var baseElements = map[string]bool{
+	"water": true,
+	"fire":  true,
+	"earth": true,
+	"air":   true,
 }
 
 func isBase(e string) bool {
-	return abaseElements[e]
+	return baseElements[e]
 }
 
 func copyMap(original map[string]bool) map[string]bool {
@@ -34,16 +36,24 @@ func copyMap(original map[string]bool) map[string]bool {
 
 // ---------------- Helper ----------------
 
-func resolveToBase(recipes RecipeMap, target string) *ElementNode {
-	root := bfsShortestPath(recipes, target)
+func resolveToBase(recipes RecipeMap, tiers TierMap, target string) *ElementNode {
+	root := bfsShortestPath(recipes, tiers, target)
 	if root == nil {
 		return nil
 	}
-	expandTree(recipes, root)
+	expandTree(recipes, tiers, root)
 	return root
 }
 
-func expandTree(recipes RecipeMap, node *ElementNode) {
+func countNodes(node ElementNode) int {
+	count := 1 // count this node
+	for _, child := range node.Children {
+		count += countNodes(child)
+	}
+	return count
+}
+
+func expandTree(recipes RecipeMap, tiers TierMap, node *ElementNode) {
 	if isBase(node.Result) {
 		return
 	}
@@ -54,9 +64,16 @@ func expandTree(recipes RecipeMap, node *ElementNode) {
 			return
 		}
 
+		parentTier := tiers[node.Result]
+
 		for _, pair := range combinations {
-			left := resolveToBase(recipes, pair[0])
-			right := resolveToBase(recipes, pair[1])
+			// Enforce child tier < parent tier
+			if tiers[pair[0]] >= parentTier || tiers[pair[1]] >= parentTier {
+				continue
+			}
+
+			left := resolveToBase(recipes, tiers, pair[0])
+			right := resolveToBase(recipes, tiers, pair[1])
 			if left != nil && right != nil {
 				node.Children = []ElementNode{
 					{
@@ -69,14 +86,14 @@ func expandTree(recipes RecipeMap, node *ElementNode) {
 		}
 	} else {
 		for i := range node.Children {
-			expandTree(recipes, &node.Children[i])
+			expandTree(recipes, tiers, &node.Children[i])
 		}
 	}
 }
 
-// ---------------- Shortest Path  ----------------
+// ---------------- Shortest Path ----------------
 
-func bfsShortestPath(recipes RecipeMap, target string) *ElementNode {
+func bfsShortestPath(recipes RecipeMap, tiers TierMap, target string) *ElementNode {
 	queue := []bfsNode{{
 		Current: target,
 		Tree:    ElementNode{Result: target},
@@ -96,8 +113,14 @@ func bfsShortestPath(recipes RecipeMap, target string) *ElementNode {
 			continue
 		}
 
+		parentTier := tiers[curr.Current]
+
 		for _, pair := range combos {
+			// Skip if already visited or tier rule fails
 			if curr.Visited[pair[0]] || curr.Visited[pair[1]] {
+				continue
+			}
+			if tiers[pair[0]] >= parentTier || tiers[pair[1]] >= parentTier {
 				continue
 			}
 
@@ -128,9 +151,9 @@ func bfsShortestPath(recipes RecipeMap, target string) *ElementNode {
 	return nil
 }
 
-// ---------------- N Recipes ----------------
+// ---------------- Find N Paths ----------------
 
-func FindNPathsBFS(recipes RecipeMap, target string, maxPaths int) BfsResult {
+func FindNPathsBFS(recipes RecipeMap, tiers TierMap, target string, maxPaths int) BfsResult {
 	type state struct {
 		current string
 		visited map[string]bool
@@ -152,13 +175,18 @@ func FindNPathsBFS(recipes RecipeMap, target string, maxPaths int) BfsResult {
 			continue
 		}
 
+		parentTier := tiers[curr.current]
+
 		for _, pair := range combos {
 			if curr.visited[pair[0]] || curr.visited[pair[1]] {
 				continue
 			}
+			if tiers[pair[0]] >= parentTier || tiers[pair[1]] >= parentTier {
+				continue
+			}
 
-			left := resolveToBase(recipes, pair[0])
-			right := resolveToBase(recipes, pair[1])
+			left := resolveToBase(recipes, tiers, pair[0])
+			right := resolveToBase(recipes, tiers, pair[1])
 			if left == nil || right == nil {
 				continue
 			}
@@ -187,18 +215,24 @@ func FindNPathsBFS(recipes RecipeMap, target string, maxPaths int) BfsResult {
 		}
 	}
 
-	var finalResult = BfsResult{target, results, 10, 0}
+	var finalResult = BfsResult{target, results, 0, 0}
 
 	return finalResult
 }
 
-// ---------------- Main ----------------
+// ---------------- Entry ----------------
 
-func MainBfs(recipes RecipeMap, target string, maxPaths int) BfsResult {
+func MainBfs(recipes RecipeMap, tiers TierMap, target string, maxPaths int) BfsResult {
 	startTime := time.Now()
-	var bfsResult BfsResult = FindNPathsBFS(recipes, target, maxPaths)
+	var bfsResult BfsResult = FindNPathsBFS(recipes, tiers, target, maxPaths)
 	searchTime := time.Since(startTime).Milliseconds()
 	bfsResult.SearchTime = float64(searchTime)
 
-	return  bfsResult
+	totalNodes := 0
+	for _, tree := range bfsResult.RecipeTree {
+		totalNodes += countNodes(tree)
+	}
+
+	bfsResult.VisitedNodes = totalNodes 
+	return bfsResult
 }

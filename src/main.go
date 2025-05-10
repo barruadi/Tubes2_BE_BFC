@@ -5,7 +5,6 @@ import (
     "net/http"
     "src/cmd"
     "os"
-    "fmt"
 )
 
 type RequestData struct {
@@ -36,10 +35,20 @@ func handleData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-    var recipes cmd.RecipeMap
-	if err := json.Unmarshal(scrapData, &recipes); err != nil {
-		fmt.Println("Invalid JSON:", err)
-		return
+    var raw map[string]struct {
+		Tier    int          `json:"tier"`
+		Recipes [][]string   `json:"recipes"`
+	}
+	if err := json.Unmarshal(scrapData, &raw); err != nil {
+		return 
+	}
+
+    recipes := make(cmd.RecipeMap)
+	tiers := make(cmd.TierMap)
+
+    for key, val := range raw {
+		recipes[key] = val.Recipes
+		tiers[key] = val.Tier
 	}
 
     if r.Method == http.MethodPost {
@@ -51,13 +60,13 @@ func handleData(w http.ResponseWriter, r *http.Request) {
         }
 
         // var response ResponseData
-        var results cmd.BfsResult
+        var results cmd.BfsResult = cmd.MainBfs(recipes, tiers, data.ElementTarget, data.MaxRecipe)
+
         if data.AlgorithmType == "bfs" {
             // BFS
             
         } else if data.AlgorithmType == "dfs" {
             // DFS
-            results = cmd.FindNPathsBFS(recipes, data.ElementTarget, data.MaxRecipe)
         } else if data.AlgorithmType == "bidirectional" {
             // BIDIRECTIONAL
 
