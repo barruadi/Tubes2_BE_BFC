@@ -1,5 +1,3 @@
-// dfs.go
-// package main
 package cmd
 
 import (
@@ -277,9 +275,9 @@ func DFSMultiple(targetElement string, maxRecipes int) []RecipeNode {
 		}
 		resultMutex.Unlock()
 	}
-	
 	return results
 }
+
 func LoadRecipesFromFile(filePath string) error {
 
 	data, err := ioutil.ReadFile(filePath)

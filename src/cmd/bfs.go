@@ -15,7 +15,7 @@ type bfsNode struct {
 
 // ---------------- Base Elements ----------------
 
-var baseElements = map[string]bool{
+var abaseElements = map[string]bool{
 	"water": true,
 	"fire":  true,
 	"earth": true,
@@ -23,7 +23,7 @@ var baseElements = map[string]bool{
 }
 
 func isBase(e string) bool {
-	return baseElements[e]
+	return abaseElements[e]
 }
 
 func copyMap(original map[string]bool) map[string]bool {
