@@ -1,13 +1,14 @@
 // dfs.go
-package main
+// package main
+package cmd
 
 import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"os"
+	// "os"
 	"sync"
-	"time"
+	// "time"
 )
 
 // ElementData menyimpan informasi tier dan resep elemen
@@ -29,7 +30,7 @@ type RecipeNode struct {
 var (
 	recipesDB    AlchemyRecipes
 	baseElements = []string{"air", "earth", "fire", "water"}
-	nodesVisited int
+	NodesVisited int
 	nodeMutex    sync.Mutex
 )
 
@@ -67,10 +68,9 @@ func getDirectRecipes(element string) [][]string {
 // incrementNodeCount menambah counter node yang dikunjungi
 func incrementNodeCount() {
 	nodeMutex.Lock()
-	nodesVisited++
+	NodesVisited++
 	nodeMutex.Unlock()
 }
-
 // buildRecipeTree membangun tree recipe dari elemen
 func buildRecipeTree(element string, visited map[string]bool) RecipeNode {
 	incrementNodeCount()
@@ -123,7 +123,7 @@ func buildRecipeTree(element string, visited map[string]bool) RecipeNode {
 		var childNodes []RecipeNode
 		
 		for _, ingredient := range recipe {
-			childNode := buildRecipeTree(ingredient, newVisited)
+			childNode := buildRecipeTree(ingredient, newVisited) //recursive 
 			
 			// Jika childNode tidak valid, tandai recipe sebagai tidak valid
 			if len(childNode.Children) == 0 && !isBaseElement(childNode.Result) {
@@ -155,36 +155,42 @@ func DFSSingle(targetElement string) RecipeNode {
 	if isBaseElement(targetElement) {
 		return RecipeNode{Result: targetElement}
 	}
-	
-	// Bangun recipe tree dengan DFS
 	return buildRecipeTree(targetElement, make(map[string]bool))
 }
 
-// DFSMultiple mencari multiple recipes dengan algoritma DFS
 func DFSMultiple(targetElement string, maxRecipes int) []RecipeNode {
+	// Reset counter node yang dikunjungi
+	NodesVisited = 0
 	// Jika target adalah elemen dasar, kembalikan langsung
+		
 	if isBaseElement(targetElement) {
 		return []RecipeNode{{Result: targetElement}}
 	}
-	
-	// Dapatkan semua recipe untuk target element
+
 	directRecipes := getDirectRecipes(targetElement)
 	
-	// Jika tidak ada recipe, kembalikan node tanpa children
-	if len(directRecipes) == 0 {
-		return []RecipeNode{{Result: targetElement}}
-	}
-	
-	// Variabel untuk menyimpan hasil
 	var results []RecipeNode
 	seen := make(map[string]bool)
 	
-	// Coba setiap direct recipe
+	var resultMutex sync.Mutex
+	var wg sync.WaitGroup
+	
+	// Gunakan channel untuk mengumpulkan hasil
+	resultChan := make(chan RecipeNode, maxRecipes)
+	
+	// Buat signal untuk memberitahu goroutine berhenti
+	done := make(chan struct{})
+	defer close(done)
+	
+	// Olah setiap recipe secara parallel
 	for _, recipe := range directRecipes {
 		// Skip jika sudah mencapai maxRecipes
+		resultMutex.Lock()
 		if len(results) >= maxRecipes {
+			resultMutex.Unlock()
 			break
 		}
+		resultMutex.Unlock()
 		
 		// Validasi tier
 		if !isValidTierCombination(recipe, targetElement) {
@@ -197,54 +203,84 @@ func DFSMultiple(targetElement string, maxRecipes int) []RecipeNode {
 			recipeStr += " + " + recipe[1]
 		}
 		
+		// Skip jika recipe ini sudah pernah dilihat
+		if seen[recipeStr] {
+			continue
+		}
+		seen[recipeStr] = true
+		
 		// Buat node untuk recipe ini
 		recipeNode := RecipeNode{
 			Result: recipeStr,
 		}
 		
-		// Proses setiap ingredient secara rekursif
-		allValid := true
-		var childNodes []RecipeNode
-		
-		for _, ingredient := range recipe {
-			// Build tree untuk ingredient ini
-			childNode := buildRecipeTree(ingredient, make(map[string]bool))
+		wg.Add(1)
+		go func(recipe []string, recipeNode RecipeNode) {
+			defer wg.Done()
 			
-			// Jika childNode tidak valid, tandai recipe sebagai tidak valid
-			if len(childNode.Children) == 0 && !isBaseElement(childNode.Result) {
-				allValid = false
-				break
+			// Proses setiap ingredient secara DFS
+			allValid := true
+			var childNodes []RecipeNode
+			
+			for _, ingredient := range recipe {
+				select {
+				case <-done:
+					return // Berhenti jika sudah cukup recipe
+				default:
+					// Bangun tree untuk ingredient ini
+					childNode := buildRecipeTree(ingredient, make(map[string]bool))
+					
+					// Jika childNode tidak valid, tandai recipe sebagai tidak valid
+					if len(childNode.Children) == 0 && !isBaseElement(childNode.Result) {
+						allValid = false
+						break
+					}
+					
+					childNodes = append(childNodes, childNode)
+				}
 			}
 			
-			childNodes = append(childNodes, childNode)
+			// Jika semua ingredient valid
+			if allValid {
+				recipeNode.Children = childNodes
+				
+				// Buat root node untuk target element
+				rootNode := RecipeNode{
+					Result:   targetElement,
+					Children: []RecipeNode{recipeNode},
+				}
+				
+				// Kirim ke channel hasil
+				select {
+				case <-done:
+					return
+				case resultChan <- rootNode:
+				}
+			}
+		}(recipe, recipeNode)
+	}
+	
+	// Goroutine untuk mengumpulkan hasil
+	go func() {
+		wg.Wait()
+		close(resultChan)
+	}()
+	
+	// Ambil hasil dari channel
+	for rootNode := range resultChan {
+		resultMutex.Lock()
+		results = append(results, rootNode)
+		if len(results) >= maxRecipes {
+			close(done) // Signal semua goroutine untuk berhenti
+			resultMutex.Unlock()
+			break
 		}
-		
-		// Jika semua ingredient valid
-		if allValid {
-			recipeNode.Children = childNodes
-			
-			// Buat root node untuk target element
-			rootNode := RecipeNode{
-				Result:   targetElement,
-				Children: []RecipeNode{recipeNode},
-			}
-			
-			// Generate key untuk mencegah duplikat
-			key := recipeStr  // Use recipe string as key, e.g. "mud + fire"
-			
-			// Jika belum pernah dilihat, tambahkan ke hasil
-			if !seen[key] {
-				seen[key] = true
-				results = append(results, rootNode)
-			}
-		}
+		resultMutex.Unlock()
 	}
 	
 	return results
 }
-
-// loadRecipesFromFile memuat data recipe dari file JSON
-func loadRecipesFromFile(filePath string) error {
+func LoadRecipesFromFile(filePath string) error {
 
 	data, err := ioutil.ReadFile(filePath)
 	if err != nil {
@@ -257,68 +293,4 @@ func loadRecipesFromFile(filePath string) error {
 	}
 	
 	return nil
-}
-
-func main() {
-	nodesVisited = 0
-	filePath := "src/data/alchemy_recipes.json"
-	
-	err := loadRecipesFromFile(filePath)
-	if err != nil {
-		fmt.Printf("Error loading recipes: %v\n", err)
-		os.Exit(1)
-	}
-	element := "planet"
-
-
-	mode := "single"  
-
-	maxRecipes := 5
-
-	
-	outputFile := "output.json"
-
-	startTime := time.Now()
-	
-
-	var result interface{}
-	
-	if mode == "single" {
-		result = DFSSingle(element)
-	} else {
-		result = DFSMultiple(element, maxRecipes)
-	}
-
-	timeTaken := time.Since(startTime).String()
-
-	type OutputResult struct {
-		RecipeResult interface{} `json:"recipeResult"`
-		TimeTaken    string      `json:"timeTaken"`
-		NodesVisited int         `json:"nodesVisited"`
-		Mode         string      `json:"mode"`
-	}
-	
-	output := OutputResult{
-		RecipeResult: result,
-		TimeTaken:    timeTaken,
-		NodesVisited: nodesVisited,
-		Mode:         mode,
-	}
-	
-	jsonResult, err := json.MarshalIndent(output, "", "  ")
-	if err != nil {
-		fmt.Println("Error marshaling JSON:", err)
-		return
-	}
-
-	fmt.Println(string(jsonResult))
-
-	if outputFile != "" {
-		err = ioutil.WriteFile(outputFile, jsonResult, 0644)
-		if err != nil {
-			fmt.Printf("Error writing to output file: %v\n", err)
-		} else {
-			fmt.Printf("Results written to %s\n", outputFile)
-		}
-	}
 }

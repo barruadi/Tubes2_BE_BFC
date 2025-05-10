@@ -1,4 +1,5 @@
-package main  // NTAR GANTI KE PACKAGE SCRAPPER klo mau integrate , func mainny jg apus
+package main  
+// NTAR GANTI KE PACKAGE SCRAPPER klo mau integrate , func mainny jg apus
 // package scrapper
 
 import (
