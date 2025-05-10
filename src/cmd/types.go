@@ -6,6 +6,7 @@ type ElementNode struct {
 }
 
 type RecipeMap  map[string][][]string
+type TierMap 	map[string]int
 
 type BfsResult struct {
 	TargetElement string
