@@ -21,7 +21,8 @@ data
 /build
 
 # development
-# src/cmd/dfs.go
+src/cmd/dfsdev.go
+output.json
 
 output
 # misc

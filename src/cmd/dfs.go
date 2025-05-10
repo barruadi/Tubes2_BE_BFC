@@ -1,5 +1,6 @@
+// dfs.go
 package main
-// package dfs
+
 import (
 	"encoding/json"
 	"fmt"
@@ -24,7 +25,7 @@ type RecipeNode struct {
 	Children []RecipeNode `json:"children,omitempty"`
 }
 
-
+// Global variables
 var (
 	recipesDB    AlchemyRecipes
 	baseElements = []string{"air", "earth", "fire", "water"}
@@ -70,302 +71,181 @@ func incrementNodeCount() {
 	nodeMutex.Unlock()
 }
 
-
-// buildRecipeTree membangun tree recipe dari recipeMap // untuk tree front end
-func buildRecipeTree(element string, recipeMap map[string][]string) RecipeNode {
+// buildRecipeTree membangun tree recipe dari elemen
+func buildRecipeTree(element string, visited map[string]bool) RecipeNode {
+	incrementNodeCount()
+	
+	// Mencegah infinite recursion
+	if visited[element] {
+		return RecipeNode{Result: element}
+	}
+	
 	// Jika elemen dasar, kembalikan langsung
 	if isBaseElement(element) {
 		return RecipeNode{Result: element}
 	}
 	
-	// Dapatkan recipe untuk elemen ini
-	recipe, found := recipeMap[element]
+	// Tambahkan elemen ke visited
+	newVisited := make(map[string]bool)
+	for k, v := range visited {
+		newVisited[k] = v
+	}
+	newVisited[element] = true
+	
+	// Dapatkan semua recipe untuk elemen ini
+	recipes := getDirectRecipes(element)
 	
 	// Jika tidak ada recipe, kembalikan node tanpa children
-	if !found || len(recipe) == 0 {
+	if len(recipes) == 0 {
 		return RecipeNode{Result: element}
 	}
 	
-	// Format recipe string
-	recipeStr := recipe[0]
-	if len(recipe) > 1 {
-		recipeStr += " + " + recipe[1]
+	// Coba setiap recipe sampai menemukan yang valid
+	for _, recipe := range recipes {
+		// Validasi tier
+		if !isValidTierCombination(recipe, element) {
+			continue
+		}
+		
+		// Format recipe string
+		recipeStr := recipe[0]
+		if len(recipe) > 1 {
+			recipeStr += " + " + recipe[1]
+		}
+		
+		// Buat node untuk recipe ini
+		recipeNode := RecipeNode{
+			Result: recipeStr,
+		}
+		
+		// Bangun children untuk setiap ingredient
+		allValid := true
+		var childNodes []RecipeNode
+		
+		for _, ingredient := range recipe {
+			childNode := buildRecipeTree(ingredient, newVisited)
+			
+			// Jika childNode tidak valid, tandai recipe sebagai tidak valid
+			if len(childNode.Children) == 0 && !isBaseElement(childNode.Result) {
+				allValid = false
+				break
+			}
+			
+			childNodes = append(childNodes, childNode)
+		}
+		
+		// Jika semua ingredient valid, kembalikan recipe tree
+		if allValid {
+			recipeNode.Children = childNodes
+			
+			return RecipeNode{
+				Result:   element,
+				Children: []RecipeNode{recipeNode},
+			}
+		}
 	}
 	
-	// Buat node untuk recipe ini
-	recipeNode := RecipeNode{
-		Result: recipeStr,
-	}
-	
-	// Bangun children untuk setiap ingredient
-	for _, ingredient := range recipe {
-		childNode := buildRecipeTree(ingredient, recipeMap)
-		recipeNode.Children = append(recipeNode.Children, childNode)
-	}
-	
-	// Buat root node untuk elemen ini
-	return RecipeNode{
-		Result:   element,
-		Children: []RecipeNode{recipeNode},
-	}
+	// Jika tidak ada recipe yang valid, kembalikan node tanpa children
+	return RecipeNode{Result: element}
 }
+
 // DFSSingle mencari satu recipe dengan algoritma DFS
 func DFSSingle(targetElement string) RecipeNode {
 	// Jika target adalah elemen dasar, kembalikan langsung
 	if isBaseElement(targetElement) {
-		incrementNodeCount()
 		return RecipeNode{Result: targetElement}
 	}
 	
-	// Stack untuk DFS
-	type StackItem struct {
-		Element  string
-		Path     []string
-		Visited  map[string]bool
-	}
-
-	// Mulai dari target element
-	stack := []StackItem{
-		{
-			Element:  targetElement,
-			Path:     []string{},
-			Visited:  make(map[string]bool),
-		},
-	}
-	
-	// Map untuk menyimpan recipe yang digunakan
-	recipeMap := make(map[string][]string)
-	
-	// Lakukan DFS
-	for len(stack) > 0 {
-		// Pop dari stack
-		current := stack[len(stack)-1]
-		stack = stack[:len(stack)-1]
-		incrementNodeCount()
-		
-		// Jika sudah pernah dikunjungi, lewati
-		if current.Visited[current.Element] {
-			continue
-		}
-		
-		// Tandai sebagai dikunjungi
-		current.Visited[current.Element] = true
-		
-		// Jika elemen dasar, lanjutkan ke elemen berikutnya
-		if isBaseElement(current.Element) {
-			continue
-		}
-		
-		// Dapatkan semua recipe untuk elemen ini
-		recipes := getDirectRecipes(current.Element)
-		
-		// Coba setiap recipe
-		for _, recipe := range recipes {
-			// Validasi tier
-			if !isValidTierCombination(recipe, current.Element) {
-				continue
-			}
-			
-			// Simpan recipe untuk elemen ini
-			recipeMap[current.Element] = recipe
-			
-			// Tambahkan setiap ingredient ke stack
-			for _, ingredient := range recipe {
-				newPath := make([]string, len(current.Path))
-				copy(newPath, current.Path)
-				newPath = append(newPath, current.Element)
-				
-				newVisited := make(map[string]bool)
-				for k, v := range current.Visited {
-					newVisited[k] = v
-				}
-				
-				stack = append(stack, StackItem{
-					Element: ingredient,
-					Path:    newPath,
-					Visited: newVisited,
-				})
-			}
-		}
-	}
-	
-	// Bangun tree dari recipeMap untuk fe
-	return buildRecipeTree(targetElement, recipeMap)
+	// Bangun recipe tree dengan DFS
+	return buildRecipeTree(targetElement, make(map[string]bool))
 }
 
 // DFSMultiple mencari multiple recipes dengan algoritma DFS
 func DFSMultiple(targetElement string, maxRecipes int) []RecipeNode {
-    if isBaseElement(targetElement) {
-        return []RecipeNode{{Result: targetElement}}
-    }
-    
-    type StackItem struct {
-        Element   string
-        Path      []string
-        RecipeMap map[string][]string  // Menyimpan recipe yang digunakan untuk setiap elemen
-    }
-    
-    // Stack untuk DFS
-    stack := []StackItem{
-        {
-            Element:   targetElement,
-            Path:      []string{},
-            RecipeMap: make(map[string][]string),
-        },
-    }
-    
-    // Set untuk mencegah duplikasi recipe
-    seen := make(map[string]bool)
-    
-    // Hasil recipe trees
-    var results []RecipeNode
-    
-    // Visited set untuk menghindari cycle
-    visited := make(map[string]bool)
-    
-    // Lakukan DFS sampai stack kosong atau maxRecipes terpenuhi
-    for len(stack) > 0 && len(results) < maxRecipes {
-        // Pop dari stack
-        current := stack[len(stack)-1]
-        stack = stack[:len(stack)-1]
-        incrementNodeCount()
-        
-        // Jika elemen sudah dikunjungi dalam path ini, lewati (hindari cycle)
-        currentPathKey := current.Element
-        for _, elem := range current.Path {
-            currentPathKey += ":" + elem
-        }
-        
-        if visited[currentPathKey] {
-            continue
-        }
-        
-        // Tandai sebagai dikunjungi
-        visited[currentPathKey] = true
-        
-        // Jika elemen dasar, lanjutkan
-        if isBaseElement(current.Element) {
-            continue
-        }
-        
-        // Dapatkan semua recipe untuk elemen ini
-        recipes := getDirectRecipes(current.Element)
-        
-        // Coba setiap recipe
-        for _, recipe := range recipes {
-            // Validasi tier
-            if !isValidTierCombination(recipe, current.Element) {
-                continue
-            }
-            
-            // Buat copy dari RecipeMap
-            newRecipeMap := make(map[string][]string)
-            for k, v := range current.RecipeMap {
-                newRecipeMap[k] = v
-            }
-            
-            // Simpan recipe untuk elemen ini
-            newRecipeMap[current.Element] = recipe
-            
-            // Cek apakah semua ingredients adalah elemen dasar atau sudah memiliki recipe valid
-            allIngredientsValid := true
-            var nonBaseIngredients []string
-            
-            for _, ingredient := range recipe {
-                if !isBaseElement(ingredient) && newRecipeMap[ingredient] == nil {
-                    allIngredientsValid = false
-                    nonBaseIngredients = append(nonBaseIngredients, ingredient)
-                }
-            }
-            
-            // Jika ada ingredient yang bukan elemen dasar dan belum punya recipe
-            if !allIngredientsValid {
-                // Tambahkan semua non-base ingredients ke stack
-                for _, ingredient := range nonBaseIngredients {
-                    newPath := make([]string, len(current.Path))
-                    copy(newPath, current.Path)
-                    newPath = append(newPath, current.Element)
-                    
-                    stack = append(stack, StackItem{
-                        Element:   ingredient,
-                        Path:      newPath,
-                        RecipeMap: newRecipeMap,
-                    })
-                }
-                continue
-            }
-            
-            // Jika semua ingredients valid, kita punya recipe lengkap
-            // Bangun recipe tree dari RecipeMap
-            recipeTree := buildRecipeTree(targetElement, newRecipeMap)
-            
-            // Buatkan key unik untuk tree ini
-            key := generateTreeKey(recipeTree)
-            
-            // Jika belum pernah dilihat, tambahkan ke hasil
-            if !seen[key] {
-                seen[key] = true
-                results = append(results, recipeTree)
-                
-                // Jika sudah mencapai maxRecipes, keluar dari loop
-                if len(results) >= maxRecipes {
-                    break
-                }
-            }
-        }
-    }
-    
-    return results
-}
-// isValidTree memeriksa apakah semua leaf dalam tree adalah elemen dasar
-func isValidTree(node RecipeNode) bool {
-	// Jika node tidak memiliki children (leaf)
-	if len(node.Children) == 0 {
-		// Jika leaf, harus elemen dasar
-		return isBaseElement(node.Result)
+	// Jika target adalah elemen dasar, kembalikan langsung
+	if isBaseElement(targetElement) {
+		return []RecipeNode{{Result: targetElement}}
 	}
 	
-	// Jika node memiliki children, periksa semua children
-	for _, child := range node.Children {
-		if !isValidTree(child) {
-			return false
+	// Dapatkan semua recipe untuk target element
+	directRecipes := getDirectRecipes(targetElement)
+	
+	// Jika tidak ada recipe, kembalikan node tanpa children
+	if len(directRecipes) == 0 {
+		return []RecipeNode{{Result: targetElement}}
+	}
+	
+	// Variabel untuk menyimpan hasil
+	var results []RecipeNode
+	seen := make(map[string]bool)
+	
+	// Coba setiap direct recipe
+	for _, recipe := range directRecipes {
+		// Skip jika sudah mencapai maxRecipes
+		if len(results) >= maxRecipes {
+			break
+		}
+		
+		// Validasi tier
+		if !isValidTierCombination(recipe, targetElement) {
+			continue
+		}
+		
+		// Format recipe string
+		recipeStr := recipe[0]
+		if len(recipe) > 1 {
+			recipeStr += " + " + recipe[1]
+		}
+		
+		// Buat node untuk recipe ini
+		recipeNode := RecipeNode{
+			Result: recipeStr,
+		}
+		
+		// Proses setiap ingredient secara rekursif
+		allValid := true
+		var childNodes []RecipeNode
+		
+		for _, ingredient := range recipe {
+			// Build tree untuk ingredient ini
+			childNode := buildRecipeTree(ingredient, make(map[string]bool))
+			
+			// Jika childNode tidak valid, tandai recipe sebagai tidak valid
+			if len(childNode.Children) == 0 && !isBaseElement(childNode.Result) {
+				allValid = false
+				break
+			}
+			
+			childNodes = append(childNodes, childNode)
+		}
+		
+		// Jika semua ingredient valid
+		if allValid {
+			recipeNode.Children = childNodes
+			
+			// Buat root node untuk target element
+			rootNode := RecipeNode{
+				Result:   targetElement,
+				Children: []RecipeNode{recipeNode},
+			}
+			
+			// Generate key untuk mencegah duplikat
+			key := recipeStr  // Use recipe string as key, e.g. "mud + fire"
+			
+			// Jika belum pernah dilihat, tambahkan ke hasil
+			if !seen[key] {
+				seen[key] = true
+				results = append(results, rootNode)
+			}
 		}
 	}
 	
-	return true
+	return results
 }
 
-
-// Key ini hanya mencegah recipe yang benar-benar identik (sama persis)
-func generateTreeKey(node RecipeNode) string {
-    if len(node.Children) == 0 {
-        return node.Result
-    }
-    
-    key := node.Result + "("
-    
-    // Untuk node dengan children, gunakan Result dari child pertama sebagai bagian dari key
-    // Ini memastikan bahwa recipe yang berbeda (mud+fire vs clay+fire) dianggap berbeda
-    if len(node.Children) > 0 {
-        key += node.Children[0].Result
-    }
-    
-    key += ")"
-    
-    return key
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-
-
-
+// loadRecipesFromFile memuat data recipe dari file JSON
 func loadRecipesFromFile(filePath string) error {
+
 	data, err := ioutil.ReadFile(filePath)
 	if err != nil {
 		return fmt.Errorf("error reading file: %v", err)
@@ -379,22 +259,27 @@ func loadRecipesFromFile(filePath string) error {
 	return nil
 }
 
-
-// UJI COBA 
 func main() {
 	nodesVisited = 0
 	filePath := "src/data/alchemy_recipes.json"
+	
 	err := loadRecipesFromFile(filePath)
 	if err != nil {
 		fmt.Printf("Error loading recipes: %v\n", err)
 		os.Exit(1)
 	}
+	element := "planet"
 
-	element := "picnic"
-	mode := "multiple"  
-	maxRecipes := 999999999
-	outputFile := "output"
+
+	mode := "single"  
+
+	maxRecipes := 5
+
+	
+	outputFile := "output.json"
+
 	startTime := time.Now()
+	
 
 	var result interface{}
 	
@@ -403,7 +288,7 @@ func main() {
 	} else {
 		result = DFSMultiple(element, maxRecipes)
 	}
-	
+
 	timeTaken := time.Since(startTime).String()
 
 	type OutputResult struct {
@@ -420,8 +305,6 @@ func main() {
 		Mode:         mode,
 	}
 	
-
-	//output json
 	jsonResult, err := json.MarshalIndent(output, "", "  ")
 	if err != nil {
 		fmt.Println("Error marshaling JSON:", err)
@@ -429,7 +312,7 @@ func main() {
 	}
 
 	fmt.Println(string(jsonResult))
-	
+
 	if outputFile != "" {
 		err = ioutil.WriteFile(outputFile, jsonResult, 0644)
 		if err != nil {
