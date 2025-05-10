@@ -11,7 +11,7 @@ import (
 
 func main() {
 	cmd.NodesVisited = 0
-	filePath := "./data/alchemy_recipes.json"
+	filePath := "./src/data/alchemy_recipes.json"
 	
 	err := cmd.LoadRecipesFromFile(filePath)
 	if err != nil {
