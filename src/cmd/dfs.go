@@ -3,8 +3,7 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
-	// "os"
+	"os"
 	"sync"
 	// "time"
 )
@@ -280,7 +279,7 @@ func DFSMultiple(targetElement string, maxRecipes int) []RecipeNode {
 
 func LoadRecipesFromFile(filePath string) error {
 
-	data, err := ioutil.ReadFile(filePath)
+	data, err := os.ReadFile(filePath)
 	if err != nil {
 		return fmt.Errorf("error reading file: %v", err)
 	}

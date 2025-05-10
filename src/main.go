@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
-	"src/cmd"
+	"tubes2_be_bfc/src/cmd"
 	// "time" // Uncomment kalau kamu mau pakai time measurement
 )
 
