@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"time"
+	"sync"
+	"context"
 )
 
 var abaseElements = map[string]bool{
@@ -87,25 +89,39 @@ func countNodes(node *ElementNode) int {
 }
 
 func FindNPathsBFS(recipes RecipeMap, tiers TierMap, target string, maxPaths int) BfsResult {
-	type state struct {
-		current string
+	type job struct {
+		pair []string
 	}
 
-	var results []ElementNode
-	queue := []state{{current: target}}
+	type resultNode struct {
+		tree ElementNode
+	}
 
-	for len(queue) > 0 && len(results) < maxPaths {
-		curr := queue[0]
-		queue = queue[1:]
+	combos, exists := recipes[target]
+	if !exists {
+		return BfsResult{TargetElement: target}
+	}
 
-		combos, exists := recipes[curr.current]
-		if !exists {
-			continue
-		}
+	parentTier := tiers[target]
+	jobs := make(chan job, len(combos))
+	resultsChan := make(chan resultNode, maxPaths)
 
-		parentTier := tiers[curr.current]
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-		for _, pair := range combos {
+	// ---- Determine worker count based on tier ----
+	workerCount := 2 + parentTier*2
+	if workerCount > 16 {
+		workerCount = 16
+	}
+
+	var wg sync.WaitGroup
+
+	// ---- Worker function ----
+	worker := func() {
+		defer wg.Done()
+		for j := range jobs {
+			pair := j.pair
 			tierA := tiers[pair[0]]
 			tierB := tiers[pair[1]]
 
@@ -114,7 +130,6 @@ func FindNPathsBFS(recipes RecipeMap, tiers TierMap, target string, maxPaths int
 			}
 
 			cache := make(map[string]*ElementNode)
-
 			left := resolveToBase(recipes, tiers, pair[0], parentTier, cache)
 			right := resolveToBase(recipes, tiers, pair[1], parentTier, cache)
 
@@ -122,17 +137,46 @@ func FindNPathsBFS(recipes RecipeMap, tiers TierMap, target string, maxPaths int
 				continue
 			}
 
-			tree := ElementNode{
-				Result:   target,
-				Sources:  pair,
-				Children: []*ElementNode{left, right},
+			select {
+			case resultsChan <- resultNode{
+				tree: ElementNode{
+					Result:   target,
+					Sources:  pair,
+					Children: []*ElementNode{left, right},
+				},
+			}:
+			case <-ctx.Done():
+				return
 			}
+		}
+	}
 
-			results = append(results, tree)
+	// ---- Start workers ----
+	for i := 0; i < workerCount; i++ {
+		wg.Add(1)
+		go worker()
+	}
 
-			if len(results) >= maxPaths {
-				break
-			}
+	// ---- Send jobs ----
+	go func() {
+		for _, pair := range combos {
+			jobs <- job{pair: pair}
+		}
+		close(jobs)
+	}()
+
+	// ---- Collect results ----
+	var results []ElementNode
+	go func() {
+		wg.Wait()
+		close(resultsChan)
+	}()
+
+	for node := range resultsChan {
+		results = append(results, node.tree)
+		if len(results) >= maxPaths {
+			cancel()
+			break
 		}
 	}
 
