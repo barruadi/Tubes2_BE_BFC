@@ -13,68 +13,21 @@ var abaseElements = map[string]bool{
 	"air":   true,
 }
 
+// ----------------- HELPER -----------------
 func isBase(e string) bool {
 	return abaseElements[e]
 }
 
-func copyMap(original map[string]bool) map[string]bool {
-	newMap := make(map[string]bool)
-	for k, v := range original {
-		newMap[k] = v
+func flattenTreeList(trees []*ElementNode) []ElementNode {
+	result := make([]ElementNode, len(trees))
+	for i, t := range trees {
+		result[i] = *t
 	}
-	return newMap
+	return result
 }
 
-// ---------------- Memoized Resolver ----------------
-
-func resolveToBase(recipes RecipeMap, tiers TierMap, target string, maxTier int, cache map[string]*ElementNode) *ElementNode {
-	if node, found := cache[target]; found {
-		return node
-	}
-
-	if isBase(target) {
-		base := &ElementNode{
-			Result:   target,
-			Sources:  nil,
-			Children: nil,
-		}
-		cache[target] = base
-		return base
-	}
-
-	combos, exists := recipes[target]
-	if !exists {
-		return nil
-	}
-
-	targetTier := tiers[target]
-	if targetTier >= maxTier {
-		return nil
-	}
-
-	for _, pair := range combos {
-		tierA := tiers[pair[0]]
-		tierB := tiers[pair[1]]
-
-		if tierA >= targetTier || tierB >= targetTier {
-			continue
-		}
-
-		left := resolveToBase(recipes, tiers, pair[0], targetTier, cache)
-		right := resolveToBase(recipes, tiers, pair[1], targetTier, cache)
-
-		if left != nil && right != nil {
-			node := &ElementNode{
-				Result:   target,
-				Sources:  pair,
-				Children: []*ElementNode{left, right},
-			}
-			cache[target] = node
-			return node
-		}
-	}
-
-	return nil
+func isUnbuildable(e string, recipes RecipeMap) bool {
+	return !isBase(e) && len(recipes[e]) == 0
 }
 
 func countNodes(node *ElementNode) int {
@@ -88,40 +41,41 @@ func countNodes(node *ElementNode) int {
 	return count
 }
 
-func FindNPathsBFS(recipes RecipeMap, tiers TierMap, target string, maxPaths int) BfsResult {
-	type job struct {
-		pair []string
-	}
 
-	type resultNode struct {
-		tree ElementNode
+func bfsBuildTree(recipes RecipeMap, tiers TierMap, target string, maxPaths int) []*ElementNode {
+	var result []*ElementNode
+
+	if isBase(target) {
+		return []*ElementNode{
+			{
+				Result:   target,
+				Sources:  nil,
+				Children: nil,
+			},
+		}
 	}
 
 	combos, exists := recipes[target]
 	if !exists {
-		return BfsResult{TargetElement: target}
+		return nil
 	}
 
 	parentTier := tiers[target]
-	jobs := make(chan job, len(combos))
-	resultsChan := make(chan resultNode, maxPaths)
 
+	queue := make(chan []string, len(combos))
+	resultsChan := make(chan *ElementNode, maxPaths)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// ---- Determine worker count based on tier ----
-	workerCount := 2 + parentTier*2
-	if workerCount > 16 {
-		workerCount = 16
-	}
-
 	var wg sync.WaitGroup
 
-	// ---- Worker function ----
 	worker := func() {
 		defer wg.Done()
-		for j := range jobs {
-			pair := j.pair
+		for pair := range queue {
+			if isUnbuildable(pair[0], recipes) || isUnbuildable(pair[1], recipes) {
+				continue
+			}
+
 			tierA := tiers[pair[0]]
 			tierB := tiers[pair[1]]
 
@@ -129,68 +83,65 @@ func FindNPathsBFS(recipes RecipeMap, tiers TierMap, target string, maxPaths int
 				continue
 			}
 
-			cache := make(map[string]*ElementNode)
-			left := resolveToBase(recipes, tiers, pair[0], parentTier, cache)
-			right := resolveToBase(recipes, tiers, pair[1], parentTier, cache)
+			leftTrees := bfsBuildTree(recipes, tiers, pair[0], maxPaths)
+			rightTrees := bfsBuildTree(recipes, tiers, pair[1], maxPaths)
 
-			if left == nil || right == nil {
-				continue
-			}
-
-			select {
-			case resultsChan <- resultNode{
-				tree: ElementNode{
-					Result:   target,
-					Sources:  pair,
-					Children: []*ElementNode{left, right},
-				},
-			}:
-			case <-ctx.Done():
-				return
+			for _, left := range leftTrees {
+				for _, right := range rightTrees {
+					select {
+					case resultsChan <- &ElementNode{
+						Result:   target,
+						Sources:  pair,
+						Children: []*ElementNode{left, right},
+					}:
+					case <-ctx.Done():
+						return
+					}
+				}
 			}
 		}
 	}
 
-	// ---- Start workers ----
+	// --------- Start workers ---------
+	workerCount := 2 + parentTier*2
+	if workerCount > 16 {
+		workerCount = 16
+	}
 	for i := 0; i < workerCount; i++ {
 		wg.Add(1)
 		go worker()
 	}
 
-	// ---- Send jobs ----
 	go func() {
 		for _, pair := range combos {
-			jobs <- job{pair: pair}
+			queue <- pair
 		}
-		close(jobs)
+		close(queue)
 	}()
 
-	// ---- Collect results ----
-	var results []ElementNode
 	go func() {
 		wg.Wait()
 		close(resultsChan)
 	}()
 
+	// --------- results ---------
 	for node := range resultsChan {
-		results = append(results, node.tree)
-		if len(results) >= maxPaths {
+		result = append(result, node)
+		if len(result) >= maxPaths {
 			cancel()
 			break
 		}
 	}
 
-	return BfsResult{
-		TargetElement: target,
-		RecipeTree:    results,
-	}
+	return result
 }
 
 func MainBfs(recipes RecipeMap, tiers TierMap, target string, maxPaths int) BfsResult {
+	var bfsResult BfsResult
 	startTime := time.Now()
-	bfsResult := FindNPathsBFS(recipes, tiers, target, maxPaths)
+	trees := bfsBuildTree(recipes, tiers, target, maxPaths)
 	bfsResult.SearchTime = float64(time.Since(startTime).Milliseconds())
-
+	bfsResult.RecipeTree = flattenTreeList(trees)
 	totalNodes := 0
 	for _, tree := range bfsResult.RecipeTree {
 		totalNodes += countNodes(&tree)
