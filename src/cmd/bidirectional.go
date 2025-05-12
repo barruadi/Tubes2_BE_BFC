@@ -95,7 +95,7 @@ func BidirectionalBfs(
 	tiers TierMap,
 	target string,
 	maxPaths int,
-) BfsResult {
+) Result {
 	start := time.Now()
 
 	forwardVisited := map[string]*ElementNode{}
@@ -110,7 +110,7 @@ func BidirectionalBfs(
 	resolveBackward(recipes, tiers, target, backwardVisited)
 
 	if _, ok := forwardVisited[target]; ok {
-		return BfsResult{
+		return Result{
 			TargetElement: target,
 			RecipeTree:    []ElementNode{{Result: target}},
 			VisitedNodes:  1,
@@ -154,7 +154,7 @@ func BidirectionalBfs(
 		count += countUniqueNodes(&tree, visited)
 	}
 
-	return BfsResult{
+	return Result{
 		TargetElement: target,
 		RecipeTree:    found,
 		VisitedNodes:  count,

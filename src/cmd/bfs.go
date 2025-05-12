@@ -136,8 +136,8 @@ func bfsBuildTree(recipes RecipeMap, tiers TierMap, target string, maxPaths int)
 	return result
 }
 
-func MainBfs(recipes RecipeMap, tiers TierMap, target string, maxPaths int) BfsResult {
-	var bfsResult BfsResult
+func MainBfs(recipes RecipeMap, tiers TierMap, target string, maxPaths int) Result {
+	var bfsResult Result
 	startTime := time.Now()
 	trees := bfsBuildTree(recipes, tiers, target, maxPaths)
 	bfsResult.SearchTime = float64(time.Since(startTime).Milliseconds())
