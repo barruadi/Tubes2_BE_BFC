@@ -21,10 +21,9 @@ data
 /build
 
 # development
-src/cmd/dfsdev.go
-output.json
 
-output
+
+src/cmd/biderectional.go
 # misc
 .DS_Store
 *.pem
