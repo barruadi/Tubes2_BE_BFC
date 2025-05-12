@@ -133,16 +133,17 @@ func handleData(w http.ResponseWriter, r *http.Request) {
         }
 
         // var response ResponseData
-        var results cmd.BfsResult = cmd.MainBfs(recipes, tiers, data.ElementTarget, data.MaxRecipe)
+        var results cmd.BfsResult
 
         if data.AlgorithmType == "bfs" {
             // BFS
-            
+            results = cmd.MainBfs(recipes, tiers, data.ElementTarget, data.MaxRecipe)
         } else if data.AlgorithmType == "dfs" {
+            // DFS
             // DFS
         } else if data.AlgorithmType == "bidirectional" {
             // BIDIRECTIONAL
-
+            results = cmd.BidirectionalBfs(recipes, tiers, data.ElementTarget, data.MaxRecipe)
         }
 
         w.WriteHeader(http.StatusOK)
