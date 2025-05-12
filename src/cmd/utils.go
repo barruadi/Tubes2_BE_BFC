@@ -1,30 +1,31 @@
 package cmd
 
-func isBaseElement(element string) bool {
-	for _, baseElement := range baseElements {
-		if element == baseElement {
-			return true
-		}
-	}
-	return false
-}
+// func isBaseElement(element string) bool {
+// 	for _, baseElement := range baseElements {
+// 		if element == baseElement {
+// 			return true
+// 		}
+// 	}
+// 	return false
+// }
 
-func isValidTierCombination(ingredients []string, result string) bool {
-	resultTier := recipesDB[result].Tier
+// func isValidTierCombination(ingredients []string, result string) bool {
+// 	resultTier := recipesDB[result].Tier
 	
-	for _, ingredient := range ingredients {
-		if recipesDB[ingredient].Tier >= resultTier {
-			return false
-		}
-	}
+// 	for _, ingredient := range ingredients {
+// 		if recipesDB[ingredient].Tier >= resultTier {
+// 			return false
+// 		}
+// 	}
 	
-	return true
-}
+// 	return true
+// }
 
 
-func getDirectRecipes(element string) [][]string {
-	if elem, exists := recipesDB[element]; exists {
-		return elem.Recipes
-	}
-	return nil
-}
+// func getDirectRecipes(element string) [][]string {
+// 	if elem, exists := recipesDB[element]; exists {
+// 		return elem.Recipes
+// 	}
+// 	return nil
+// }
+
