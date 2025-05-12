@@ -26,7 +26,7 @@ func dfsBuildTree(
 	visited map[string]bool,
 	depth int,
 	maxDepth int,
-	memo *MemoCache, // ✅ tambahan cache di sini
+	memo *MemoCache,
 ) []*ElementNode {
 
 	if isBaseElement(target) {
@@ -39,7 +39,7 @@ func dfsBuildTree(
 		}
 	}
 
-	// ✅ Cek apakah sudah ada di memo
+	// ✅ Cek memo
 	memo.mu.Lock()
 	if val, ok := memo.store[target]; ok {
 		memo.mu.Unlock()
@@ -76,45 +76,54 @@ func dfsBuildTree(
 
 	worker := func() {
 		defer wg.Done()
-		for combo := range comboChan {
-			resultMutex.Lock()
-			if len(result) >= maxPaths {
-				resultMutex.Unlock()
+		for {
+			select {
+			case <-ctx.Done():
 				return
-			}
-			resultMutex.Unlock()
+			case combo, ok := <-comboChan:
+				if !ok {
+					return
+				}
 
-			if isUnbuildable(combo[0], recipes) || isUnbuildable(combo[1], recipes) {
-				continue
-			}
-
-			tierA := tiers[combo[0]]
-			tierB := tiers[combo[1]]
-			if tierA >= parentTier || tierB >= parentTier {
-				continue
-			}
-
-			leftTrees := dfsBuildTree(recipes, tiers, combo[0], maxPaths, newVisited, depth+1, maxDepth, memo)
-			rightTrees := dfsBuildTree(recipes, tiers, combo[1], maxPaths, newVisited, depth+1, maxDepth, memo)
-
-			for _, left := range leftTrees {
-				for _, right := range rightTrees {
-					select {
-					case resultsChan <- &ElementNode{
-						Result:   target,
-						Sources:  combo,
-						Children: []*ElementNode{left, right},
-					}:
-					case <-ctx.Done():
-						return
-					}
-
-					resultMutex.Lock()
-					if len(result) >= maxPaths {
-						resultMutex.Unlock()
-						return
-					}
+				resultMutex.Lock()
+				if len(result) >= maxPaths {
 					resultMutex.Unlock()
+					return
+				}
+				resultMutex.Unlock()
+
+				if isUnbuildable(combo[0], recipes) || isUnbuildable(combo[1], recipes) {
+					continue
+				}
+
+				tierA := tiers[combo[0]]
+				tierB := tiers[combo[1]]
+				if tierA >= parentTier || tierB >= parentTier {
+					continue
+				}
+
+				leftTrees := dfsBuildTree(recipes, tiers, combo[0], maxPaths, newVisited, depth+1, maxDepth, memo)
+				rightTrees := dfsBuildTree(recipes, tiers, combo[1], maxPaths, newVisited, depth+1, maxDepth, memo)
+
+				for _, left := range leftTrees {
+					for _, right := range rightTrees {
+						resultMutex.Lock()
+						if len(result) >= maxPaths {
+							resultMutex.Unlock()
+							return
+						}
+						resultMutex.Unlock()
+
+						select {
+						case resultsChan <- &ElementNode{
+							Result:   target,
+							Sources:  combo,
+							Children: []*ElementNode{left, right},
+						}:
+						case <-ctx.Done():
+							return
+						}
+					}
 				}
 			}
 		}
@@ -140,20 +149,23 @@ func dfsBuildTree(
 
 	for node := range resultsChan {
 		resultMutex.Lock()
-		result = append(result, node)
 		if len(result) >= maxPaths {
+			resultMutex.Unlock()
 			cancel()
+			break // ✅ Hentikan baca channel segera
 		}
+		result = append(result, node)
 		resultMutex.Unlock()
 	}
 
-	// ✅ Simpan ke memo cache
+	// ✅ Simpan hasil ke cache
 	memo.mu.Lock()
 	memo.store[target] = result
 	memo.mu.Unlock()
 
 	return result
 }
+
 
 
 func MainDfs(recipes RecipeMap, tiers TierMap, targetElement string, maxRecipes int) Result {
