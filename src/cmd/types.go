@@ -44,11 +44,11 @@ type DfsResult struct {
 }
 
 
-type ElementData struct {
+type ElementInfo struct {
 	Tier    int        `json:"tier"`
 	Recipes [][]string `json:"recipes"`
 }
 
 
-type AlchemyRecipes map[string]ElementData
+type AlchemyRecipes map[string]ElementInfo
 
