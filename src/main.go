@@ -134,36 +134,36 @@ func main() {
 
 	
 
-	singleResult := cmd.BidirectionalSingle(targetElement)
+	// singleResult := cmd.BidirectionalSingle(targetElement)
 
 	
-	// Save single result to JSON
-	singleOutputFile := targetElement + "_pure_bidirectional_single.json"
-	singleJsonData, err := json.MarshalIndent(singleResult, "", "  ")
-	if err != nil {
-		log.Fatalf("Error marshaling to JSON: %v", err)
-	}
+	// // Save single result to JSON
+	// singleOutputFile := targetElement + "_pure_bidirectional_single.json"
+	// singleJsonData, err := json.MarshalIndent(singleResult, "", "  ")
+	// if err != nil {
+	// 	log.Fatalf("Error marshaling to JSON: %v", err)
+	// }
 	
-	err = ioutil.WriteFile(singleOutputFile, singleJsonData, 0644)
-	if err != nil {
-		log.Fatalf("Error writing JSON file: %v", err)
-	}
+	// err = ioutil.WriteFile(singleOutputFile, singleJsonData, 0644)
+	// if err != nil {
+	// 	log.Fatalf("Error writing JSON file: %v", err)
+	// }
 
 
-	// ===== TEST BIDIRECTIONAL MULTIPLE =====
+	// // ===== TEST BIDIRECTIONAL MULTIPLE =====
 	
 
-	multipleResult := cmd.BidirectionalSearch(targetElement, maxRecipes)
+	// multipleResult := cmd.BidirectionalSearch(targetElement, maxRecipes)
 
-	multipleOutputFile := fmt.Sprintf("%s_pure_bidirectional_multiple_%d.json", targetElement, maxRecipes)
-	multipleJsonData, err := json.MarshalIndent(multipleResult, "", "  ")
-	if err != nil {
-		log.Fatalf("Error marshaling to JSON: %v", err)
-	}
+	// multipleOutputFile := fmt.Sprintf("%s_pure_bidirectional_multiple_%d.json", targetElement, maxRecipes)
+	// multipleJsonData, err := json.MarshalIndent(multipleResult, "", "  ")
+	// if err != nil {
+	// 	log.Fatalf("Error marshaling to JSON: %v", err)
+	// }
 	
-	err = ioutil.WriteFile(multipleOutputFile, multipleJsonData, 0644)
-	if err != nil {
-		log.Fatalf("Error writing JSON file: %v", err)
-	}
+	// err = ioutil.WriteFile(multipleOutputFile, multipleJsonData, 0644)
+	// if err != nil {
+	// 	log.Fatalf("Error writing JSON file: %v", err)
+	// }
 	
 }
