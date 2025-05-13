@@ -5,7 +5,7 @@
 </h2>
 
 <p align="center">
-  <img src="doc/img/bfc.png" alt="BFC"/>
+  <img src="doc/img/bfc.jpg" alt="BFC"/>
 </p>
 
 ## Table of Contents
@@ -89,7 +89,7 @@ npm install
 4. Create .env.local file and set backend URL
 
 ```bash
-echo 'NEXT_PUBLIC_BACKEND_URL=http://localhost:8080' >> .env.local
+NEXT_PUBLIC_BACKEND_URL=http://localhost:8080
 ```
 
 5. Start the Next.js development server:
@@ -141,7 +141,7 @@ cd Tubes2_FE_BFC
 ```
 3. Create a .env.production file and define the backend URL:
 ```bash
-echo 'NEXT_PUBLIC_BACKEND_URL=http://localhost:8080' >> .env.production
+NEXT_PUBLIC_BACKEND_URL=http://localhost:8080
 ```
 4. Build and run the Docker container
 
