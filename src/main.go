@@ -4,7 +4,8 @@ import (
     "encoding/json"
     "net/http"
     "tubes2_be_bfc/src/cmd"
-    "os"
+	"tubes2_be_bfc/src/utils"
+    // "os"
 )
 
 type RequestData struct {
@@ -30,23 +31,23 @@ func handleData(w http.ResponseWriter, r *http.Request) {
     }
 
     // SCRAP DATA ----- ganti jadi utils.scrapper --------
-    scrapData, err := os.ReadFile("./src/data/alchemy_recipes.json")
+    scrapData, err := utils.ScrapeAlchemyElements()
     if err != nil {
 		return
 	}
 
-    var raw map[string]struct {
-		Tier    int          `json:"tier"`
-		Recipes [][]string   `json:"recipes"`
-	}
-	if err := json.Unmarshal(scrapData, &raw); err != nil {
-		return 
-	}
+    // var raw map[string]struct {
+	// 	Tier    int          `json:"tier"`
+	// 	Recipes [][]string   `json:"recipes"`
+	// }
+	// if err := json.Unmarshal(scrapData, &raw); err != nil {
+	// 	return 
+	// }
 
     recipes := make(cmd.RecipeMap)
 	tiers := make(cmd.TierMap)
 
-    for key, val := range raw {
+    for key, val := range scrapData {
 		recipes[key] = val.Recipes
 		tiers[key] = val.Tier
 	}

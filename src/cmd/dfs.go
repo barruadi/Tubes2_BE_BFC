@@ -26,7 +26,7 @@ func dfsBuildTree(
 	visited map[string]bool,
 	depth int,
 	maxDepth int,
-	memo *MemoCache, // ✅ tambahan cache di sini
+	memo *MemoCache, 
 ) []*ElementNode {
 
 	if isBaseElement(target) {
@@ -39,7 +39,6 @@ func dfsBuildTree(
 		}
 	}
 
-	// ✅ Cek apakah sudah ada di memo
 	memo.mu.Lock()
 	if val, ok := memo.store[target]; ok {
 		memo.mu.Unlock()
@@ -147,7 +146,7 @@ func dfsBuildTree(
 		resultMutex.Unlock()
 	}
 
-	// ✅ Simpan ke memo cache
+
 	memo.mu.Lock()
 	memo.store[target] = result
 	memo.mu.Unlock()

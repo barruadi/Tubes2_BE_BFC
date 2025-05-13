@@ -23,7 +23,7 @@
 src/cmd/dfsdev.go
 
 
-src/cmd/biderectional.go
+
 # misc
 .DS_Store
 *.pem
