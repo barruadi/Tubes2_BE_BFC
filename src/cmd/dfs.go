@@ -63,7 +63,7 @@ func dfsBuildTree(
 	parentTier := tiers[target]
 
 	resultsChan := make(chan *ElementNode, maxPaths)
-	ctx, cancel := context.WithCancel(context.Background())
+	_, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	comboChan := make(chan []string, len(combos))
@@ -75,48 +75,47 @@ func dfsBuildTree(
 	worker := func() {
 		defer wg.Done()
 		for combo := range comboChan {
+			// Cek limit sebelum lanjut
 			resultMutex.Lock()
 			if len(result) >= maxPaths {
 				resultMutex.Unlock()
 				return
 			}
 			resultMutex.Unlock()
-
+	
 			if isUnbuildable(combo[0], recipes) || isUnbuildable(combo[1], recipes) {
 				continue
 			}
-
+	
 			tierA := tiers[combo[0]]
 			tierB := tiers[combo[1]]
 			if tierA >= parentTier || tierB >= parentTier {
 				continue
 			}
-
+	
 			leftTrees := dfsBuildTree(recipes, tiers, combo[0], maxPaths, newVisited, depth+1, maxDepth, memo)
 			rightTrees := dfsBuildTree(recipes, tiers, combo[1], maxPaths, newVisited, depth+1, maxDepth, memo)
-
+	
 			for _, left := range leftTrees {
 				for _, right := range rightTrees {
-					select {
-					case resultsChan <- &ElementNode{
-						Result:   target,
-						Sources:  combo,
-						Children: []*ElementNode{left, right},
-					}:
-					case <-ctx.Done():
-						return
-					}
-
 					resultMutex.Lock()
 					if len(result) >= maxPaths {
 						resultMutex.Unlock()
+						cancel()
 						return
 					}
+					newNode := &ElementNode{
+						Result:   target,
+						Sources:  combo,
+						Children: []*ElementNode{left, right},
+					}
+					result = append(result, newNode)
 					resultMutex.Unlock()
 				}
 			}
 		}
 	}
+	
 
 	workerCount := 4
 	for i := 0; i < workerCount; i++ {
