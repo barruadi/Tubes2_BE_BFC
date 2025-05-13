@@ -3,13 +3,12 @@ package cmd
 import (
 	"context"
 	"sync"
-	// "sync/atomic"
 	"time"
 )
 
 var (
 	baseElements     = map[string]bool{"water": true, "fire": true, "earth": true, "air": true}
-	// visitedNodeCount int64
+
 )
 
 
@@ -17,7 +16,7 @@ func isBaseElement(e string) bool {
 	return baseElements[e]
 }
 
-// dfsBuildTree membangun pohon recipe menggunakan DFS
+
 func dfsBuildTree(
 	recipes RecipeMap,
 	tiers TierMap,
@@ -173,7 +172,7 @@ func MainDfs(recipes RecipeMap, tiers TierMap, targetElement string, maxRecipes 
 	
 	trees := dfsBuildTree(recipes, tiers, targetElement, maxRecipes, make(map[string]bool), 0, 15, cache)
 
-	searchTime := float64(time.Since(startTime).Milliseconds())
+	searchTime := float64(time.Since(startTime).Microseconds())
 	
     totalNodes := 0
     for _, tree := range trees {
@@ -189,10 +188,3 @@ func MainDfs(recipes RecipeMap, tiers TierMap, targetElement string, maxRecipes 
 	return result
 }
 
-// func GetVisitedNodeCount() int64 {
-// 	return atomic.LoadInt64(&visitedNodeCount)
-// }
-
-// func ResetVisitedNodeCount() {
-// 	atomic.StoreInt64(&visitedNodeCount, 0)
-// }

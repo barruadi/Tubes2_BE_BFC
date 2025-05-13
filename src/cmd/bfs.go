@@ -51,7 +51,7 @@ func bfsBuildTree(
 	tiers TierMap,
 	target string,
 	maxPaths int,
-	cache *MemoCache, // ✅ cache injected here
+	cache *MemoCache, 
 ) []*ElementNode {
 	var result []*ElementNode
 
@@ -67,7 +67,7 @@ func bfsBuildTree(
 		return []*ElementNode{node}
 	}
 
-	// ✅ Check memoized result first
+
 	cache.mu.Lock()
 	if val, ok := cache.store[target]; ok {
 		cache.mu.Unlock()
@@ -160,7 +160,6 @@ func bfsBuildTree(
 		}
 	}
 
-	// ✅ Save to memo
 	cache.mu.Lock()
 	cache.store[target] = result
 	cache.mu.Unlock()
@@ -173,7 +172,7 @@ func MainBfs(recipes RecipeMap, tiers TierMap, target string, maxPaths int) Resu
 	cache := &MemoCache{store: make(map[string][]*ElementNode)}
 	startTime := time.Now()
 	trees := bfsBuildTree(recipes, tiers, target, maxPaths, cache)
-	bfsResult.SearchTime = float64(time.Since(startTime).Milliseconds())
+	bfsResult.SearchTime = float64(time.Since(startTime).Microseconds())
 	bfsResult.RecipeTree = flattenTreeList(trees)
 	totalNodes := 0
 	for _, tree := range bfsResult.RecipeTree {
