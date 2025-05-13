@@ -1,13 +1,12 @@
-package main  
+package utils
 
-// package scrapper
 
 import (
-	"encoding/json"
+	// "encoding/json"
 	"fmt"
-	"io/ioutil"
+	// "io/ioutil"
 	"net/http"
-	"os"
+	// "os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -16,10 +15,10 @@ import (
 )
 
 // ElementInfo adalah struktur untuk menyimpan informasi tentang elemen
-type ElementInfo struct {
-	Tier    int        `json:"tier"`
-	Recipes [][]string `json:"recipes"`
-}
+// type ElementInfo struct {
+// 	Tier    int        `json:"tier"`
+// 	Recipes [][]string `json:"recipes"`
+// }
 
 // CleanText menghilangkan whitespace berlebih dari string
 func CleanText(text string) string {
@@ -61,7 +60,10 @@ func ParseRecipes(recipeCell *goquery.Selection) [][]string {
 }
 
 // ScrapeAlchemyElements melakukan scraping pada wiki Little Alchemy 2
-func ScrapeAlchemyElements() (map[string]ElementInfo, error) {
+func ScrapeAlchemyElements() (map[string]struct {
+	Tier    int        `json:"tier"`
+	Recipes [][]string `json:"recipes"`
+}, error) {
 	startTime := time.Now()
 	
 	// Siapkan HTTP client dengan User-Agent untuk menghindari pemblokiran
@@ -92,13 +94,19 @@ func ScrapeAlchemyElements() (map[string]ElementInfo, error) {
 		return nil, fmt.Errorf("error parsing HTML: %w", err)
 	}
 	
-	// Inisialisasi map untuk menyimpan data elemen
-	elements := make(map[string]ElementInfo)
+	// Inisialisasi map untuk menyimpan data elemen dengan struct anonim
+	elements := make(map[string]struct {
+		Tier    int        `json:"tier"`
+		Recipes [][]string `json:"recipes"`
+	})
 	
 	// Tambahkan elemen dasar secara manual
 	baseElements := []string{"air", "earth", "fire", "water"}
 	for _, base := range baseElements {
-		elements[base] = ElementInfo{
+		elements[base] = struct {
+			Tier    int        `json:"tier"`
+			Recipes [][]string `json:"recipes"`
+		}{
 			Tier:    0,
 			Recipes: [][]string{},
 		}
@@ -175,7 +183,10 @@ func ScrapeAlchemyElements() (map[string]ElementInfo, error) {
 			recipes := ParseRecipes(recipeCell)
 			
 			if len(recipes) > 0 {
-				elements[elementName] = ElementInfo{
+				elements[elementName] = struct {
+					Tier    int        `json:"tier"`
+					Recipes [][]string `json:"recipes"`
+				}{
 					Tier:    tier,
 					Recipes: recipes,
 				}
@@ -192,108 +203,108 @@ func ScrapeAlchemyElements() (map[string]ElementInfo, error) {
 	return elements, nil
 }
 
-// SaveElementsToJSON menyimpan data elemen ke file JSON
-func SaveElementsToJSON(elements map[string]ElementInfo, filepath string) error {
-	// Buat JSON
-	jsonData, err := json.MarshalIndent(elements, "", "  ")
-	if err != nil {
-		return fmt.Errorf("error creating JSON: %w", err)
-	}
+// // SaveElementsToJSON menyimpan data elemen ke file JSON
+// func SaveElementsToJSON(elements map[string]ElementInfo, filepath string) error {
+// 	// Buat JSON
+// 	jsonData, err := json.MarshalIndent(elements, "", "  ")
+// 	if err != nil {
+// 		return fmt.Errorf("error creating JSON: %w", err)
+// 	}
 	
-	// Buat direktori jika belum ada
-	dir := strings.TrimSuffix(filepath, "/"+filepath)
-	if dir != "" && dir != filepath {
-		err = os.MkdirAll(dir, 0755)
-		if err != nil {
-			return fmt.Errorf("error creating directory: %w", err)
-		}
-	}
+// 	// Buat direktori jika belum ada
+// 	dir := strings.TrimSuffix(filepath, "/"+filepath)
+// 	if dir != "" && dir != filepath {
+// 		err = os.MkdirAll(dir, 0755)
+// 		if err != nil {
+// 			return fmt.Errorf("error creating directory: %w", err)
+// 		}
+// 	}
 	
-	// Tulis ke file
-	err = ioutil.WriteFile(filepath, jsonData, 0644)
-	if err != nil {
-		return fmt.Errorf("error writing JSON file: %w", err)
-	}
+// 	// Tulis ke file
+// 	err = ioutil.WriteFile(filepath, jsonData, 0644)
+// 	if err != nil {
+// 		return fmt.Errorf("error writing JSON file: %w", err)
+// 	}
 	
-	fmt.Printf("Successfully saved data to %s\n", filepath)
-	return nil
-}
+// 	fmt.Printf("Successfully saved data to %s\n", filepath)
+// 	return nil
+// }
 
-// LoadElementsFromJSON membaca data elemen dari file JSON
-func LoadElementsFromJSON(filepath string) (map[string]ElementInfo, error) {
-	// Baca file
-	data, err := ioutil.ReadFile(filepath)
-	if err != nil {
-		return nil, fmt.Errorf("error reading JSON file: %w", err)
-	}
+// // LoadElementsFromJSON membaca data elemen dari file JSON
+// func LoadElementsFromJSON(filepath string) (map[string]ElementInfo, error) {
+// 	// Baca file
+// 	data, err := ioutil.ReadFile(filepath)
+// 	if err != nil {
+// 		return nil, fmt.Errorf("error reading JSON file: %w", err)
+// 	}
 	
-	// Parse JSON
-	var elements map[string]ElementInfo
-	err = json.Unmarshal(data, &elements)
-	if err != nil {
-		return nil, fmt.Errorf("error parsing JSON: %w", err)
-	}
+// 	// Parse JSON
+// 	var elements map[string]ElementInfo
+// 	err = json.Unmarshal(data, &elements)
+// 	if err != nil {
+// 		return nil, fmt.Errorf("error parsing JSON: %w", err)
+// 	}
 	
-	return elements, nil
-}
+// 	return elements, nil
+// }
 
-// Contoh Fungsi main untuk testing
-func main() {
-	// Test scraping
-	fmt.Println("Starting Little Alchemy 2 scraper...")
+// // Contoh Fungsi main untuk testing
+// func main() {
+// 	// Test scraping
+// 	fmt.Println("Starting Little Alchemy 2 scraper...")
 	
-	// Scrape elemen dari wiki
-	elements, err := ScrapeAlchemyElements()
-	if err != nil {
-		fmt.Printf("Error scraping elements: %v\n", err)
-		os.Exit(1)
-	}
+// 	// Scrape elemen dari wiki
+// 	elements, err := ScrapeAlchemyElements()
+// 	if err != nil {
+// 		fmt.Printf("Error scraping elements: %v\n", err)
+// 		os.Exit(1)
+// 	}
 	
-	// Buat direktori untuk output jika belum ada
-	err = os.MkdirAll("src/data", 0755)
-	if err != nil {
-		fmt.Printf("Error creating directory: %v\n", err)
-		os.Exit(1)
-	}
+// 	// Buat direktori untuk output jika belum ada
+// 	err = os.MkdirAll("src/data", 0755)
+// 	if err != nil {
+// 		fmt.Printf("Error creating directory: %v\n", err)
+// 		os.Exit(1)
+// 	}
 	
-	// Simpan ke file JSON
-	outputPath := "src/data/alchemy_recipes.json"
-	err = SaveElementsToJSON(elements, outputPath)
-	if err != nil {
-		fmt.Printf("Error saving JSON: %v\n", err)
-		os.Exit(1)
-	}
+// 	// Simpan ke file JSON
+// 	outputPath := "src/data/alchemy_recipes.json"
+// 	err = SaveElementsToJSON(elements, outputPath)
+// 	if err != nil {
+// 		fmt.Printf("Error saving JSON: %v\n", err)
+// 		os.Exit(1)
+// 	}
 	
-	// Tes membaca dari file JSON
-	fmt.Println("\nTesting JSON loading...")
-	loadedElements, err := LoadElementsFromJSON(outputPath)
-	if err != nil {
-		fmt.Printf("Error loading JSON: %v\n", err)
-		os.Exit(1)
-	}
+// 	// Tes membaca dari file JSON
+// 	fmt.Println("\nTesting JSON loading...")
+// 	loadedElements, err := LoadElementsFromJSON(outputPath)
+// 	if err != nil {
+// 		fmt.Printf("Error loading JSON: %v\n", err)
+// 		os.Exit(1)
+// 	}
 	
-	// Verifikasi data
-	fmt.Printf("Successfully loaded %d elements from JSON\n", len(loadedElements))
+// 	// Verifikasi data
+// 	fmt.Printf("Successfully loaded %d elements from JSON\n", len(loadedElements))
 	
-	// Tampilkan beberapa elemen
-	fmt.Println("\nSample elements:")
-	sampleElements := []string{"brick", "volcano", "human", "time"}
-	for _, name := range sampleElements {
-		if info, exists := loadedElements[name]; exists {
-			fmt.Printf("- %s (Tier %d) has %d recipe(s)\n", 
-				name, info.Tier, len(info.Recipes))
-			for i, recipe := range info.Recipes {
-				if i < 3 { // Tunjukkan max 3 resep
-					fmt.Printf("  * %s + %s\n", recipe[0], recipe[1])
-				}
-			}
-			if len(info.Recipes) > 3 {
-				fmt.Printf("  * (and %d more recipes)\n", len(info.Recipes)-3)
-			}
-		} else {
-			fmt.Printf("- %s: Not found\n", name)
-		}
-	}
+// 	// Tampilkan beberapa elemen
+// 	fmt.Println("\nSample elements:")
+// 	sampleElements := []string{"brick", "volcano", "human", "time"}
+// 	for _, name := range sampleElements {
+// 		if info, exists := loadedElements[name]; exists {
+// 			fmt.Printf("- %s (Tier %d) has %d recipe(s)\n", 
+// 				name, info.Tier, len(info.Recipes))
+// 			for i, recipe := range info.Recipes {
+// 				if i < 3 { // Tunjukkan max 3 resep
+// 					fmt.Printf("  * %s + %s\n", recipe[0], recipe[1])
+// 				}
+// 			}
+// 			if len(info.Recipes) > 3 {
+// 				fmt.Printf("  * (and %d more recipes)\n", len(info.Recipes)-3)
+// 			}
+// 		} else {
+// 			fmt.Printf("- %s: Not found\n", name)
+// 		}
+// 	}
 	
-	fmt.Println("\nScraper test completed successfully!")
-}
+// 	fmt.Println("\nScraper test completed successfully!")
+// }
