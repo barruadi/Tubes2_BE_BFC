@@ -1,175 +1,261 @@
 package cmd
 
 import (
+	"context"
+	"sync"
 	"time"
 )
 
-type pair [2]string
-
-func buildInverseRecipeMap(recipes RecipeMap) map[string][]pair {
-	inv := make(map[string][]pair)
-	for result, combos := range recipes {
-		for _, c := range combos {
-			inv[result] = append(inv[result], pair{c[0], c[1]})
-		}
-	}
-	return inv
+// Menyimpan state untuk pencarian dua arah
+type BidirectionalState struct {
+	ForwardCache  map[string][]*ElementNode
+	BackwardCache map[string][][]string
+	mu            sync.RWMutex
 }
 
-func combineElements(known map[string]*ElementNode, recipes map[string][]pair) map[string]*ElementNode {
-	newElements := make(map[string]*ElementNode)
+// Inisialisasi state baru
+func NewBidirectionalState() *BidirectionalState {
+	return &BidirectionalState{
+		ForwardCache:  make(map[string][]*ElementNode),
+		BackwardCache: make(map[string][][]string),
+	}
+}
 
-	for e1, n1 := range known {
-		for e2, n2 := range known {
-			if e1 > e2 {
-				continue 
+// Membangun jalur dari elemen dasar ke target
+func generateBackwardPaths(recipes RecipeMap, tiers TierMap, state *BidirectionalState) {
+	queue := make([]string, 0)
+	for el := range abaseElements {
+		queue = append(queue, el)
+		state.mu.Lock()
+		state.BackwardCache[el] = [][]string{{el}}
+		state.mu.Unlock()
+	}
+
+	visited := make(map[string]bool)
+	for el := range abaseElements {
+		visited[el] = true
+	}
+
+	for len(queue) > 0 {
+		curr := queue[0]
+		queue = queue[1:]
+		currTier := tiers[curr]
+
+		for result, combos := range recipes {
+			resultTier := tiers[result]
+			if currTier >= resultTier {
+				continue
 			}
 
-			for result, pairs := range recipes {
-				for _, p := range pairs {
-					if (p[0] == e1 && p[1] == e2) || (p[0] == e2 && p[1] == e1) {
-						if _, exists := known[result]; !exists {
-							newElements[result] = &ElementNode{
-								Result:   result,
-								Sources:  []string{e1, e2},
-								Children: []*ElementNode{n1, n2},
-							}
+			for _, combo := range combos {
+				if combo[0] == curr || combo[1] == curr {
+					var other string
+					if combo[0] == curr {
+						other = combo[1]
+					} else {
+						other = combo[0]
+					}
+
+					if tiers[other] >= resultTier {
+						continue
+					}
+
+					state.mu.RLock()
+					_, otherVisited := state.BackwardCache[other]
+					state.mu.RUnlock()
+
+					if otherVisited {
+						state.mu.Lock()
+						state.BackwardCache[result] = append(state.BackwardCache[result], combo)
+						if !visited[result] {
+							queue = append(queue, result)
+							visited[result] = true
+						}
+						state.mu.Unlock()
+					}
+				}
+			}
+		}
+	}
+}
+
+// Membangun pohon dari target ke elemen dasar
+func forwardBuildTree(
+	recipes RecipeMap,
+	tiers TierMap,
+	target string,
+	maxPaths int,
+	state *BidirectionalState,
+	visitedNodes *int,
+) []*ElementNode {
+	var result []*ElementNode
+
+	if isBase(target) {
+		node := &ElementNode{Result: target}
+		state.mu.Lock()
+		state.ForwardCache[target] = []*ElementNode{node}
+		state.mu.Unlock()
+		*visitedNodes++
+		return []*ElementNode{node}
+	}
+
+	state.mu.RLock()
+	if cached, ok := state.ForwardCache[target]; ok {
+		state.mu.RUnlock()
+		return cached
+	}
+	state.mu.RUnlock()
+
+	state.mu.RLock()
+	backwardPaths, exists := state.BackwardCache[target]
+	state.mu.RUnlock()
+
+	if exists {
+		for _, path := range backwardPaths {
+			if len(path) == 1 {
+				result = append(result, &ElementNode{Result: target})
+				*visitedNodes++
+			} else if len(path) == 2 {
+				left, right := path[0], path[1]
+				if tiers[left] >= tiers[target] || tiers[right] >= tiers[target] {
+					continue
+				}
+
+				leftTrees := forwardBuildTree(recipes, tiers, left, maxPaths, state, visitedNodes)
+				rightTrees := forwardBuildTree(recipes, tiers, right, maxPaths, state, visitedNodes)
+
+				for _, l := range leftTrees {
+					for _, r := range rightTrees {
+						if len(result) >= maxPaths {
+							break
+						}
+						result = append(result, &ElementNode{
+							Result:   target,
+							Sources:  path,
+							Children: []*ElementNode{l, r},
+						})
+						*visitedNodes++
+					}
+					if len(result) >= maxPaths {
+						break
+					}
+				}
+			}
+			if len(result) >= maxPaths {
+				break
+			}
+		}
+
+		if len(result) > 0 {
+			state.mu.Lock()
+			state.ForwardCache[target] = result
+			state.mu.Unlock()
+			return result
+		}
+	}
+
+	combos, exists := recipes[target]
+	if !exists {
+		return result
+	}
+
+	parentTier := tiers[target]
+	queue := make(chan []string, len(combos))
+	resultsChan := make(chan *ElementNode, maxPaths)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var wg sync.WaitGroup
+
+	worker := func() {
+		defer wg.Done()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case pair, ok := <-queue:
+				if !ok {
+					return
+				}
+
+				if isUnbuildable(pair[0], recipes) || isUnbuildable(pair[1], recipes) {
+					continue
+				}
+
+				if tiers[pair[0]] >= parentTier || tiers[pair[1]] >= parentTier {
+					continue
+				}
+
+				leftTrees := forwardBuildTree(recipes, tiers, pair[0], maxPaths, state, visitedNodes)
+				rightTrees := forwardBuildTree(recipes, tiers, pair[1], maxPaths, state, visitedNodes)
+
+				for _, l := range leftTrees {
+					for _, r := range rightTrees {
+						select {
+						case resultsChan <- &ElementNode{
+							Result:   target,
+							Sources:  pair,
+							Children: []*ElementNode{l, r},
+						}:
+							*visitedNodes++
+						case <-ctx.Done():
+							return
 						}
 					}
 				}
 			}
 		}
 	}
-	return newElements
-}
 
-func resolveBackward(
-	recipes RecipeMap,
-	tiers TierMap,
-	target string,
-	visited map[string]*ElementNode,
-) {
-	if _, ok := visited[target]; ok || isBase(target) {
-		if isBase(target) {
-			visited[target] = &ElementNode{Result: target}
-		}
-		return
+	workerCount := 2 + parentTier*2
+	if workerCount > 16 {
+		workerCount = 16
+	}
+	for i := 0; i < workerCount; i++ {
+		wg.Add(1)
+		go worker()
 	}
 
-	for _, pair := range recipes[target] {
-		resolveBackward(recipes, tiers, pair[0], visited)
-		resolveBackward(recipes, tiers, pair[1], visited)
+	go func() {
+		for _, combo := range combos {
+			queue <- combo
+		}
+		close(queue)
+	}()
 
-		left := visited[pair[0]]
-		right := visited[pair[1]]
+	go func() {
+		wg.Wait()
+		close(resultsChan)
+	}()
 
-		if left != nil && right != nil {
-			visited[target] = &ElementNode{
-				Result:   target,
-				Sources:  pair,
-				Children: []*ElementNode{left, right},
-			}
-			return
+	for node := range resultsChan {
+		result = append(result, node)
+		if len(result) >= maxPaths {
+			cancel()
+			break
 		}
 	}
+
+	state.mu.Lock()
+	state.ForwardCache[target] = result
+	state.mu.Unlock()
+
+	return result
 }
 
-func mergeTrees(mid string, forward *ElementNode, backward *ElementNode) *ElementNode {
-	// mid is the connecting node
-	// backward will include target and up, forward includes base and up
-	if forward == nil {
-		return backward
-	}
-	if backward == nil {
-		return forward
-	}
-	return &ElementNode{
-		Result:   mid,
-		Sources:  forward.Sources,
-		Children: forward.Children,
-	}
-}
+func MainBidirectionalBfs(recipes RecipeMap, tiers TierMap, target string, maxPaths int) Result {
+	var res Result
 
-func BidirectionalBfs(
-	recipes RecipeMap,
-	tiers TierMap,
-	target string,
-	maxPaths int,
-) Result {
+	state := NewBidirectionalState()
+	visited := 0
+
+	generateBackwardPaths(recipes, tiers, state)
+
 	start := time.Now()
+	trees := forwardBuildTree(recipes, tiers, target, maxPaths, state, &visited)
+	res.SearchTime = float64(time.Since(start).Microseconds())
+	res.RecipeTree = flattenTreeList(trees)
+	res.VisitedNodes = visited
 
-	forwardVisited := map[string]*ElementNode{}
-	backwardVisited := map[string]*ElementNode{}
-
-	queue := []string{}
-	for base := range abaseElements {
-		forwardVisited[base] = &ElementNode{Result: base}
-		queue = append(queue, base)
-	}
-
-	resolveBackward(recipes, tiers, target, backwardVisited)
-
-	if _, ok := forwardVisited[target]; ok {
-		return Result{
-			TargetElement: target,
-			RecipeTree:    []ElementNode{{Result: target}},
-			VisitedNodes:  1,
-			SearchTime:    float64(time.Since(start).Milliseconds()),
-		}
-	}
-
-	inv := buildInverseRecipeMap(recipes)
-
-	found := []ElementNode{}
-
-	for len(queue) > 0 && len(found) < maxPaths {
-		currentKnown := make(map[string]*ElementNode)
-		for _, e := range queue {
-			currentKnown[e] = forwardVisited[e]
-		}
-		queue = nil
-
-		newElements := combineElements(currentKnown, inv)
-		for k, v := range newElements {
-			if _, ok := forwardVisited[k]; ok {
-				continue
-			}
-			forwardVisited[k] = v
-			queue = append(queue, k)
-
-			if backNode, ok := backwardVisited[k]; ok {
-				merged := mergeTrees(k, v, backNode)
-				found = append(found, *merged)
-				if len(found) >= maxPaths {
-					break
-				}
-			}
-		}
-	}
-
-	// Count unique nodes
-	visited := make(map[string]bool)
-	count := 0
-	for _, tree := range found {
-		count += countUniqueNodes(&tree, visited)
-	}
-
-	return Result{
-		TargetElement: target,
-		RecipeTree:    found,
-		VisitedNodes:  count,
-		SearchTime:    float64(time.Since(start).Milliseconds()),
-	}
-}
-
-func countUniqueNodes(node *ElementNode, visited map[string]bool) int {
-	if node == nil || visited[node.Result] {
-		return 0
-	}
-	visited[node.Result] = true
-	count := 1
-	for _, child := range node.Children {
-		count += countUniqueNodes(child, visited)
-	}
-	return count
+	return res
 }

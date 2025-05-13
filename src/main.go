@@ -74,6 +74,7 @@ func handleData(w http.ResponseWriter, r *http.Request) {
         } else if data.AlgorithmType == "bidirectional" {
             // BIDIRECTIONAL
             // results = cmd.BidirectionalBfs(recipes, tiers, data.ElementTarget, data.MaxRecipe)
+            results = cmd.MainBidirectionalBfs(Recipes, Tiers, data.ElementTarget, data.MaxRecipe)
         }
 
         w.WriteHeader(http.StatusOK)
