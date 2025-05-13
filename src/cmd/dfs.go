@@ -3,13 +3,12 @@ package cmd
 import (
 	"context"
 	"sync"
-	"sync/atomic"
 	"time"
 )
 
 var (
 	baseElements     = map[string]bool{"water": true, "fire": true, "earth": true, "air": true}
-	visitedNodeCount int64
+
 )
 
 
@@ -17,7 +16,7 @@ func isBaseElement(e string) bool {
 	return baseElements[e]
 }
 
-// dfsBuildTree membangun pohon recipe menggunakan DFS
+
 func dfsBuildTree(
 	recipes RecipeMap,
 	tiers TierMap,
@@ -26,7 +25,7 @@ func dfsBuildTree(
 	visited map[string]bool,
 	depth int,
 	maxDepth int,
-	memo *MemoCache, // ✅ tambahan cache di sini
+	memo *MemoCache, 
 ) []*ElementNode {
 
 	if isBaseElement(target) {
@@ -39,7 +38,6 @@ func dfsBuildTree(
 		}
 	}
 
-	// ✅ Cek apakah sudah ada di memo
 	memo.mu.Lock()
 	if val, ok := memo.store[target]; ok {
 		memo.mu.Unlock()
@@ -147,7 +145,7 @@ func dfsBuildTree(
 		resultMutex.Unlock()
 	}
 
-	// ✅ Simpan ke memo cache
+
 	memo.mu.Lock()
 	memo.store[target] = result
 	memo.mu.Unlock()
@@ -158,7 +156,7 @@ func dfsBuildTree(
 
 func MainDfs(recipes RecipeMap, tiers TierMap, targetElement string, maxRecipes int) Result {
 
-	atomic.StoreInt64(&visitedNodeCount, 0)
+	// atomic.StoreInt64(&visitedNodeCount, 0)
 
 	startTime := time.Now()
 	cache := &MemoCache{store: make(map[string][]*ElementNode)}
@@ -174,23 +172,19 @@ func MainDfs(recipes RecipeMap, tiers TierMap, targetElement string, maxRecipes 
 	
 	trees := dfsBuildTree(recipes, tiers, targetElement, maxRecipes, make(map[string]bool), 0, 15, cache)
 
-	searchTime := float64(time.Since(startTime).Milliseconds())
+	searchTime := float64(time.Since(startTime).Microseconds())
 	
-
+    totalNodes := 0
+    for _, tree := range trees {
+        totalNodes += countNodes(tree)
+    }
 	result := Result{
 		TargetElement: targetElement,
 		RecipeTree:    flattenTreeList(trees),
-		VisitedNodes:  int(atomic.LoadInt64(&visitedNodeCount)),
+		VisitedNodes:  totalNodes,
 		SearchTime:    searchTime,
 	}
 	
 	return result
 }
 
-func GetVisitedNodeCount() int64 {
-	return atomic.LoadInt64(&visitedNodeCount)
-}
-
-func ResetVisitedNodeCount() {
-	atomic.StoreInt64(&visitedNodeCount, 0)
-}

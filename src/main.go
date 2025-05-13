@@ -4,7 +4,14 @@ import (
     "encoding/json"
     "net/http"
     "tubes2_be_bfc/src/cmd"
-    "os"
+	"tubes2_be_bfc/src/utils"
+	"log"
+    // "os"
+)
+
+var (
+    Recipes cmd.RecipeMap
+    Tiers   cmd.TierMap
 )
 
 type RequestData struct {
@@ -13,7 +20,26 @@ type RequestData struct {
     Multiple      bool   `json:"Multiple"`
     MaxRecipe     int    `json:"MaxRecipe"`
 }
+func init() {
 
+  
+    scrapData, err := utils.ScrapeAlchemyElements()
+    if err != nil {
+        log.Fatalf("Gagal melakukan scraping: %v", err)
+    }
+    
+    log.Printf("Berhasil scraping %d elemen", len(scrapData))
+    
+    Recipes = make(cmd.RecipeMap)
+    Tiers = make(cmd.TierMap)
+ 
+    for key, val := range scrapData {
+        Recipes[key] = val.Recipes
+        Tiers[key] = val.Tier
+    }
+    
+    log.Println("Persiapan data selesai, siap menerima permintaan.")
+}
 func handleData(w http.ResponseWriter, r *http.Request) {
     w.Header().Set("Content-Type", "application/json")
     w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -28,29 +54,6 @@ func handleData(w http.ResponseWriter, r *http.Request) {
         http.Error(w, "Only POST allowed", http.StatusMethodNotAllowed)
         return
     }
-
-    // SCRAP DATA ----- ganti jadi utils.scrapper --------
-    scrapData, err := os.ReadFile("./src/data/alchemy_recipes.json")
-    if err != nil {
-		return
-	}
-
-    var raw map[string]struct {
-		Tier    int          `json:"tier"`
-		Recipes [][]string   `json:"recipes"`
-	}
-	if err := json.Unmarshal(scrapData, &raw); err != nil {
-		return 
-	}
-
-    recipes := make(cmd.RecipeMap)
-	tiers := make(cmd.TierMap)
-
-    for key, val := range raw {
-		recipes[key] = val.Recipes
-		tiers[key] = val.Tier
-	}
-
     if r.Method == http.MethodPost {
         var data RequestData
         err := json.NewDecoder(r.Body).Decode(&data)
@@ -64,10 +67,10 @@ func handleData(w http.ResponseWriter, r *http.Request) {
 
         if data.AlgorithmType == "bfs" {
             // BFS
-            results = cmd.MainBfs(recipes, tiers, data.ElementTarget, data.MaxRecipe)
+            results = cmd.MainBfs(Recipes, Tiers, data.ElementTarget, data.MaxRecipe)
         } else if data.AlgorithmType == "dfs" {
             // DFS
-            results = cmd.MainDfs(recipes, tiers, data.ElementTarget, data.MaxRecipe)
+            results = cmd.MainDfs(Recipes, Tiers, data.ElementTarget, data.MaxRecipe)
         } else if data.AlgorithmType == "bidirectional" {
             // BIDIRECTIONAL
             // results = cmd.BidirectionalBfs(recipes, tiers, data.ElementTarget, data.MaxRecipe)
