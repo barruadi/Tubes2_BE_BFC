@@ -41,19 +41,39 @@ func countNodes(node *ElementNode) int {
 	return count
 }
 
+type MemoCache struct {
+	mu    sync.Mutex
+	store map[string][]*ElementNode
+}
 
-func bfsBuildTree(recipes RecipeMap, tiers TierMap, target string, maxPaths int) []*ElementNode {
+func bfsBuildTree(
+	recipes RecipeMap,
+	tiers TierMap,
+	target string,
+	maxPaths int,
+	cache *MemoCache, 
+) []*ElementNode {
 	var result []*ElementNode
 
 	if isBase(target) {
-		return []*ElementNode{
-			{
-				Result:   target,
-				Sources:  nil,
-				Children: nil,
-			},
+		node := &ElementNode{
+			Result:   target,
+			Sources:  nil,
+			Children: nil,
 		}
+		cache.mu.Lock()
+		cache.store[target] = []*ElementNode{node}
+		cache.mu.Unlock()
+		return []*ElementNode{node}
 	}
+
+
+	cache.mu.Lock()
+	if val, ok := cache.store[target]; ok {
+		cache.mu.Unlock()
+		return val
+	}
+	cache.mu.Unlock()
 
 	combos, exists := recipes[target]
 	if !exists {
@@ -61,7 +81,6 @@ func bfsBuildTree(recipes RecipeMap, tiers TierMap, target string, maxPaths int)
 	}
 
 	parentTier := tiers[target]
-
 	queue := make(chan []string, len(combos))
 	resultsChan := make(chan *ElementNode, maxPaths)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -71,38 +90,47 @@ func bfsBuildTree(recipes RecipeMap, tiers TierMap, target string, maxPaths int)
 
 	worker := func() {
 		defer wg.Done()
-		for pair := range queue {
-			if isUnbuildable(pair[0], recipes) || isUnbuildable(pair[1], recipes) {
-				continue
-			}
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case pair, ok := <-queue:
+				if !ok {
+					return
+				}
 
-			tierA := tiers[pair[0]]
-			tierB := tiers[pair[1]]
+				if isUnbuildable(pair[0], recipes) || isUnbuildable(pair[1], recipes) {
+					continue
+				}
 
-			if tierA >= parentTier || tierB >= parentTier {
-				continue
-			}
+				tierA := tiers[pair[0]]
+				tierB := tiers[pair[1]]
+				if tierA >= parentTier || tierB >= parentTier {
+					continue
+				}
 
-			leftTrees := bfsBuildTree(recipes, tiers, pair[0], maxPaths)
-			rightTrees := bfsBuildTree(recipes, tiers, pair[1], maxPaths)
+				// Recursively build children using same memo cache
+				leftTrees := bfsBuildTree(recipes, tiers, pair[0], maxPaths, cache)
+				rightTrees := bfsBuildTree(recipes, tiers, pair[1], maxPaths, cache)
 
-			for _, left := range leftTrees {
-				for _, right := range rightTrees {
-					select {
-					case resultsChan <- &ElementNode{
-						Result:   target,
-						Sources:  pair,
-						Children: []*ElementNode{left, right},
-					}:
-					case <-ctx.Done():
-						return
+				for _, left := range leftTrees {
+					for _, right := range rightTrees {
+						select {
+						case resultsChan <- &ElementNode{
+							Result:   target,
+							Sources:  pair,
+							Children: []*ElementNode{left, right},
+						}:
+						case <-ctx.Done():
+							return
+						}
 					}
 				}
 			}
 		}
 	}
 
-	// --------- Start workers ---------
+	// Launch worker goroutines
 	workerCount := 2 + parentTier*2
 	if workerCount > 16 {
 		workerCount = 16
@@ -124,7 +152,6 @@ func bfsBuildTree(recipes RecipeMap, tiers TierMap, target string, maxPaths int)
 		close(resultsChan)
 	}()
 
-	// --------- results ---------
 	for node := range resultsChan {
 		result = append(result, node)
 		if len(result) >= maxPaths {
@@ -133,14 +160,19 @@ func bfsBuildTree(recipes RecipeMap, tiers TierMap, target string, maxPaths int)
 		}
 	}
 
+	cache.mu.Lock()
+	cache.store[target] = result
+	cache.mu.Unlock()
+
 	return result
 }
 
 func MainBfs(recipes RecipeMap, tiers TierMap, target string, maxPaths int) Result {
 	var bfsResult Result
+	cache := &MemoCache{store: make(map[string][]*ElementNode)}
 	startTime := time.Now()
-	trees := bfsBuildTree(recipes, tiers, target, maxPaths)
-	bfsResult.SearchTime = float64(time.Since(startTime).Milliseconds())
+	trees := bfsBuildTree(recipes, tiers, target, maxPaths, cache)
+	bfsResult.SearchTime = float64(time.Since(startTime).Microseconds())
 	bfsResult.RecipeTree = flattenTreeList(trees)
 	totalNodes := 0
 	for _, tree := range bfsResult.RecipeTree {
@@ -149,4 +181,4 @@ func MainBfs(recipes RecipeMap, tiers TierMap, target string, maxPaths int) Resu
 	bfsResult.VisitedNodes = totalNodes
 
 	return bfsResult
-}
+} 
